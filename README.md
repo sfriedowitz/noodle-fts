@@ -1,3 +1,3 @@
 # rfts
 
-Field-theoretic simulation in Rust.
+Field-theoretic simulations in Rust.
