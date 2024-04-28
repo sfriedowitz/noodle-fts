@@ -1,1 +1,5 @@
-struct System {}
+use crate::fft::FFT;
+
+struct System {
+    fft: FFT,
+}
