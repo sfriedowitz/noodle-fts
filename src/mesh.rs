@@ -1,19 +1,20 @@
 #[derive(Clone, Debug)]
 pub struct Mesh {
     dimensions: Vec<usize>,
-    k_dimensions: Vec<usize>,
 }
 
 impl Mesh {
-    pub fn new(dimensions: &[usize]) -> Self {
-        let mut k_dimensions = dimensions.to_vec();
+    pub fn new(dimensions: Vec<usize>) -> Self {
+        Self {
+            dimensions: dimensions.into(),
+        }
+    }
+
+    pub fn complex(&self) -> Self {
+        let mut k_dimensions = self.dimensions.clone();
         let last_dim = k_dimensions.last_mut().unwrap();
         *last_dim = *last_dim / 2 + 1;
-
-        Self {
-            dimensions: dimensions.to_vec(),
-            k_dimensions,
-        }
+        Self::new(k_dimensions)
     }
 
     pub fn n_dim(&self) -> usize {
@@ -24,7 +25,11 @@ impl Mesh {
         &self.dimensions
     }
 
-    pub fn k_dimensions(&self) -> &[usize] {
-        &self.k_dimensions
+    pub fn size(&self) -> usize {
+        self.dimensions
+            .iter()
+            .copied()
+            .reduce(|a, b| a * b)
+            .unwrap()
     }
 }

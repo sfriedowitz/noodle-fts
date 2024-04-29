@@ -36,8 +36,9 @@ impl FFT {
             })
             .collect();
 
-        let work1 = CField::zeros(IxDyn(mesh.k_dimensions()));
-        let work2 = CField::zeros(IxDyn(mesh.k_dimensions()));
+        let k_mesh = mesh.complex();
+        let work1 = CField::zeros(IxDyn(k_mesh.dimensions()));
+        let work2 = CField::zeros(IxDyn(k_mesh.dimensions()));
 
         Self {
             mesh,

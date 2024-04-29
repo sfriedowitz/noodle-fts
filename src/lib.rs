@@ -17,7 +17,7 @@ mod tests {
 
     #[test]
     fn testing() {
-        let mesh = Mesh::new(&[4, 4]);
+        let mesh = Mesh::new(vec![4, 4]);
 
         let mut fft = FFT::new(mesh.clone(), None);
 
@@ -26,7 +26,7 @@ mod tests {
             *v = i as f64;
         }
 
-        let mut output = CField::zeros(IxDyn(mesh.k_dimensions()));
+        let mut output = CField::zeros(IxDyn(mesh.complex().dimensions()));
 
         fft.forward(&input, &mut output);
         fft.inverse(&output, &mut input);
