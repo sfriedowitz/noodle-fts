@@ -26,10 +26,6 @@ impl Mesh {
     }
 
     pub fn size(&self) -> usize {
-        self.dimensions
-            .iter()
-            .copied()
-            .reduce(|a, b| a * b)
-            .unwrap()
+        self.dimensions.iter().product()
     }
 }
