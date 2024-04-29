@@ -1,4 +1,4 @@
-use crate::{dimensions::Dimensions, fft::FFT, types::RField};
+use crate::{fft::FFT, mesh::Mesh, types::RField};
 
 pub enum StepMethod {
     RK2,
@@ -14,7 +14,7 @@ pub struct MDESolver {
 }
 
 impl MDESolver {
-    pub fn new(dimensions: &Dimensions, method: StepMethod) -> Self {
+    pub fn new(mesh: &Mesh, method: StepMethod) -> Self {
         todo!()
     }
 

@@ -1,5 +1,9 @@
-use crate::fft::FFT;
+use std::collections::HashMap;
+
+use crate::{mesh::Mesh, species::Species, types::RField};
 
 struct System {
-    fft: FFT,
+    mesh: Mesh,
+    species: Vec<Species>,
+    fields: HashMap<usize, RField>,
 }
