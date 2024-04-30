@@ -1,6 +1,6 @@
 use ndarray::Zip;
 
-use crate::types::RField;
+use crate::field::RField;
 
 pub struct Point {
     q: f64,

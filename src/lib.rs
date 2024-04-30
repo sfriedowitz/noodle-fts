@@ -1,20 +1,12 @@
-mod ensemble;
-mod fft;
-mod mde;
-mod mesh;
+mod chem;
+mod field;
+mod interactions;
 mod species;
 mod system;
-mod types;
 
 #[cfg(test)]
 mod tests {
-    use ndarray::IxDyn;
-
-    use crate::{
-        fft::FFT,
-        mesh::Mesh,
-        types::{CField, RField},
-    };
+    use crate::field::{fft::FFT, mesh::Mesh, CField, RField};
 
     #[test]
     fn testing() {
@@ -22,12 +14,12 @@ mod tests {
 
         let mut fft = FFT::new(mesh.clone(), None);
 
-        let mut input = RField::zeros(IxDyn(mesh.dimensions()));
+        let mut input = RField::zeros(mesh.dimensions());
         for (i, v) in input.iter_mut().enumerate() {
             *v = i as f64;
         }
 
-        let mut output = CField::zeros(IxDyn(mesh.complex().dimensions()));
+        let mut output = CField::zeros(mesh.to_complex().dimensions());
 
         fft.forward(&input, &mut output);
         fft.inverse(&output, &mut input);

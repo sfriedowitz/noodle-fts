@@ -10,7 +10,7 @@ impl Mesh {
         }
     }
 
-    pub fn complex(&self) -> Self {
+    pub fn to_complex(&self) -> Self {
         let mut k_dimensions = self.dimensions.clone();
         let last_dim = k_dimensions.last_mut().unwrap();
         *last_dim = *last_dim / 2 + 1;

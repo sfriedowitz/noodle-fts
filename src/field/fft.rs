@@ -2,10 +2,8 @@ use ndarray::IxDyn;
 use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, Normalization, R2cFftHandler};
 use num::complex::Complex64;
 
-use crate::{
-    mesh::Mesh,
-    types::{CField, RField},
-};
+use super::mesh::Mesh;
+use crate::field::{CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
@@ -36,7 +34,7 @@ impl FFT {
             })
             .collect();
 
-        let k_mesh = mesh.complex();
+        let k_mesh = mesh.to_complex();
         let work1 = CField::zeros(IxDyn(k_mesh.dimensions()));
         let work2 = CField::zeros(IxDyn(k_mesh.dimensions()));
 

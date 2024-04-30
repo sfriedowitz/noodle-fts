@@ -1,8 +1,14 @@
 use std::collections::HashMap;
 
-use crate::{mesh::Mesh, types::RField};
+use crate::field::{domain::Domain, RField};
 
-struct System {
-    mesh: Mesh,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ensemble {
+    Closed,
+    Open,
+}
+
+pub struct System {
+    domain: Domain,
     fields: HashMap<usize, RField>,
 }
