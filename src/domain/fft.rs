@@ -3,12 +3,12 @@ use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, Normalization,
 use num::complex::Complex64;
 
 use super::mesh::Mesh;
-use crate::field::{CField, RField};
+use crate::domain::{CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
 pub struct FFT {
-    mesh: Mesh,
+    // 1 real, dim-1 complex handlers
     r2c_handler: R2cFftHandler<f64>,
     c2c_handlers: Vec<FftHandler<f64>>,
     // Work buffers with half-size last dimension
@@ -17,7 +17,7 @@ pub struct FFT {
 }
 
 impl FFT {
-    pub fn new(mesh: Mesh, normalization: Option<Normalization<Complex64>>) -> Self {
+    pub fn new(mesh: &Mesh, normalization: Option<Normalization<Complex64>>) -> Self {
         let r2c_dim = mesh.dimensions().last().unwrap();
         let r2c_handler = match &normalization {
             Some(norm) => R2cFftHandler::<f64>::new(*r2c_dim).normalization(norm.clone()),
@@ -39,7 +39,6 @@ impl FFT {
         let work2 = CField::zeros(IxDyn(k_mesh.dimensions()));
 
         Self {
-            mesh,
             r2c_handler,
             c2c_handlers,
             work1,
@@ -47,9 +46,13 @@ impl FFT {
         }
     }
 
+    pub fn n_dim(&self) -> usize {
+        self.c2c_handlers.len() + 1
+    }
+
     pub fn forward(&mut self, input: &RField, output: &mut CField) {
         // Transform the real -> complex dimension first
-        let r2c_axis = self.mesh.n_dim() - 1;
+        let r2c_axis = self.n_dim() - 1;
         ndfft_r2c(input, output, &mut self.r2c_handler, r2c_axis);
 
         // Transform the remaining complex -> complex axes
@@ -70,7 +73,7 @@ impl FFT {
         }
 
         // Transform the accumulated work into the output array
-        let r2c_axis = self.mesh.n_dim() - 1;
+        let r2c_axis = self.n_dim() - 1;
         ndifft_r2c(&self.work2, output, &mut self.r2c_handler, r2c_axis);
     }
 }

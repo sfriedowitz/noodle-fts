@@ -1,6 +1,6 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Monomer {
-    id: usize,
-    size: f64,
-    charge: f64,
+    pub id: usize,
+    pub size: f64,
+    pub charge: f64,
 }

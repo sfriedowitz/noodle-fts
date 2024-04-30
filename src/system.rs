@@ -1,14 +1,10 @@
-use std::collections::HashMap;
-
-use crate::field::{domain::Domain, RField};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Ensemble {
-    Closed,
-    Open,
-}
+use crate::{
+    chem::monomer::Monomer,
+    domain::{domain::Domain, RField},
+};
 
 pub struct System {
     domain: Domain,
-    fields: HashMap<usize, RField>,
+    monomers: Vec<Monomer>,
+    omegas: Vec<RField>,
 }

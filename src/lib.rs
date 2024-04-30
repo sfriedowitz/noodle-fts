@@ -1,18 +1,18 @@
 mod chem;
-mod field;
+mod domain;
 mod interactions;
 mod species;
 mod system;
 
 #[cfg(test)]
 mod tests {
-    use crate::field::{fft::FFT, mesh::Mesh, CField, RField};
+    use crate::domain::{fft::FFT, mesh::Mesh, CField, RField};
 
     #[test]
     fn testing() {
         let mesh = Mesh::new(vec![4, 4]);
 
-        let mut fft = FFT::new(mesh.clone(), None);
+        let mut fft = FFT::new(&mesh, None);
 
         let mut input = RField::zeros(mesh.dimensions());
         for (i, v) in input.iter_mut().enumerate() {
