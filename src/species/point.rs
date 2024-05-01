@@ -1,15 +1,18 @@
 use ndarray::Zip;
 
 use super::solver::{SolverInput, SpeciesSolver};
-use crate::domain::RField;
+use crate::{
+    chem::{monomer::Monomer, species::Species},
+    domain::RField,
+};
 
-pub struct Point {
-    monomer_id: usize,
+pub struct PointSolver {
+    species: Species,
+    monomer: Monomer,
     density: RField,
-    q: f64,
 }
 
-impl SpeciesSolver for Point {
+impl SpeciesSolver for PointSolver {
     fn solve<'a>(&mut self, input: SolverInput<'a>) {
         let monomer = input.monomers[self.monomer_id];
         let omega = &input.omegas[self.monomer_id];

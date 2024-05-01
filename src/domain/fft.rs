@@ -2,13 +2,12 @@ use ndarray::IxDyn;
 use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, Normalization, R2cFftHandler};
 use num::complex::Complex64;
 
-use super::mesh::Mesh;
-use crate::domain::{CField, RField};
+use super::{mesh::Mesh, CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
 pub struct FFT {
-    // 1 real, dim-1 complex handlers
+    // 1 real, n_dim-1 complex handlers
     r2c_handler: R2cFftHandler<f64>,
     c2c_handlers: Vec<FftHandler<f64>>,
     // Work buffers with half-size last dimension
@@ -75,5 +74,29 @@ impl FFT {
         // Transform the accumulated work into the output array
         let r2c_axis = self.n_dim() - 1;
         ndifft_r2c(&self.work2, output, &mut self.r2c_handler, r2c_axis);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::{fft::FFT, mesh::Mesh, CField, RField};
+
+    #[test]
+    fn test_fft() {
+        let mesh = Mesh::new(vec![4, 4]);
+
+        let mut fft = FFT::new(&mesh, None);
+
+        let mut input = RField::zeros(mesh.dimensions());
+        for (i, v) in input.iter_mut().enumerate() {
+            *v = i as f64;
+        }
+        let mut output = CField::zeros(mesh.to_complex().dimensions());
+
+        fft.forward(&input, &mut output);
+        fft.inverse(&output, &mut input);
+
+        println!("{}", input);
+        println!("{}", output);
     }
 }

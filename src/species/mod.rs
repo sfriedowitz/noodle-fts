@@ -1,3 +1,2 @@
-pub mod ensemble;
+pub mod chem;
 pub mod point;
-pub mod solver;
