@@ -6,8 +6,9 @@ authors = ["Sean Friedowitz"]
 readme = "README.md"
 
 [dependencies]
+float-cmp = "0.9.0"
 ndarray = "0.15.6"
-ndarray-linalg = "0.16.0"
+ndarray-linalg = { version = "0.16.0", features = ["openblas-system"] }
 ndarray-rand = "0.14.0"
 ndrustfft = "0.4.4"
 num = "0.4.2"
