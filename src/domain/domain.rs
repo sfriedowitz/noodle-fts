@@ -1,12 +1,17 @@
-use super::{fft::FFT, mesh::Mesh, RField};
+use super::{cell::UnitCell, mesh::Mesh, RField};
 
 pub struct Domain {
     mesh: Mesh,
-    fft: FFT,
+    cell: UnitCell,
     ksq: RField,
 }
 
 impl Domain {
+    pub fn new(mesh: Mesh, cell: UnitCell) -> Self {
+        let ksq = RField::zeros(mesh.to_complex().dimensions());
+        Self { mesh, cell, ksq }
+    }
+
     pub fn mesh_size(&self) -> usize {
         self.mesh.size()
     }
