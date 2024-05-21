@@ -148,14 +148,10 @@ mod tests {
         let eye = Array2::eye(cell.ndim());
 
         let cell_dot = cell.shape().dot(cell.shape_inv());
-        for (x, i) in cell_dot.iter().zip(eye.iter()) {
-            assert_approx_eq!(f64, *x, *i)
-        }
+        assert!(cell_dot.abs_diff_eq(&eye, 1e-8));
 
         let metric_dot = cell.metric().dot(cell.metric_inv());
-        for (x, i) in metric_dot.iter().zip(eye.iter()) {
-            assert_approx_eq!(f64, *x, *i)
-        }
+        assert!(metric_dot.abs_diff_eq(&eye, 1e-8));
     }
 
     #[test]
@@ -180,7 +176,5 @@ mod tests {
         let cell = UnitCell::new(parameters).unwrap();
         assert!(cell.ndim() == 3);
         check_cell_shape(&cell);
-
-        dbg!(cell);
     }
 }
