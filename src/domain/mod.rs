@@ -1,7 +1,11 @@
 use ndarray::ArrayD;
 
-pub mod cell;
-pub mod dimensions;
-pub mod domain;
-pub mod fft;
-pub mod mesh;
+mod cell;
+mod domain;
+mod fft;
+mod mesh;
+
+pub use cell::{CellParameters, UnitCell};
+pub use domain::Domain;
+pub use fft::FFT;
+pub use mesh::Mesh;

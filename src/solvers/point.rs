@@ -7,8 +7,6 @@ use crate::{
 };
 
 pub struct PointSolver {
-    species: Species,
-    monomer: Monomer,
     density: RField,
 }
 

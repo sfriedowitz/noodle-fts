@@ -14,6 +14,10 @@ pub trait SpeciesDescription {
     fn size(&self, monomers: &[Monomer]) -> f64;
 }
 
+/// Enumeration of molecular species types.
+///
+/// Species implement the `SpeciesDescription` trait,
+/// which provides the basic interface for computing system-level species quantities.
 #[enum_dispatch(SpeciesDescription)]
 #[derive(Debug, Clone)]
 pub enum Species {
@@ -71,13 +75,13 @@ impl Polymer {
         }
     }
 
+    pub fn nblock(&self) -> usize {
+        return self.blocks.len();
+    }
+
     pub fn with_block(mut self, block: Block) -> Self {
         self.blocks.push(block);
         self
-    }
-
-    pub fn nblock(&self) -> usize {
-        return self.blocks.len();
     }
 }
 
@@ -114,8 +118,7 @@ mod tests {
         let monomer = Monomer::new(0, 1.0);
         let species: Species = Point::new(monomer.id).into();
 
-        let mut expected_ids = HashSet::new();
-        expected_ids.insert(monomer.id);
+        let expected_ids = HashSet::from([monomer.id]);
         assert!(species.monomer_ids() == expected_ids);
 
         assert!(species.monomer_fraction(monomer.id) == 1.0);
@@ -134,9 +137,7 @@ mod tests {
 
         let species: Species = Polymer::new(vec![block_a, block_b], 100).unwrap().into();
 
-        let mut expected_ids = HashSet::new();
-        expected_ids.insert(monomer_a.id);
-        expected_ids.insert(monomer_b.id);
+        let expected_ids = HashSet::from([monomer_a.id, monomer_b.id]);
         assert!(species.monomer_ids() == expected_ids);
 
         assert!(species.monomer_fraction(monomer_a.id) == 0.5);

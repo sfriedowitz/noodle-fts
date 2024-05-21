@@ -2,13 +2,13 @@ use ndarray::IxDyn;
 use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, Normalization, R2cFftHandler};
 use num::complex::Complex64;
 
-use super::mesh::Mesh;
-use crate::prelude::{CField, RField};
+use super::Mesh;
+use crate::prelude::{CField, FTSError, RField, Result};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
 pub struct FFT {
-    // 1 real, n_dim-1 complex handlers
+    // 1 real, ndim-1 complex handlers
     r2c_handler: R2cFftHandler<f64>,
     c2c_handlers: Vec<FftHandler<f64>>,
     // Work buffers with half-size last dimension
@@ -17,26 +17,23 @@ pub struct FFT {
 }
 
 impl FFT {
-    pub fn new(mesh: &Mesh, normalization: Option<Normalization<Complex64>>) -> Self {
-        let r2c_dim = mesh.dimensions().last().unwrap();
-        let r2c_handler = match &normalization {
-            Some(norm) => R2cFftHandler::<f64>::new(*r2c_dim).normalization(norm.clone()),
-            None => R2cFftHandler::<f64>::new(*r2c_dim),
+    pub fn new(mesh: Mesh) -> Self {
+        let r2c_handler = match mesh {
+            Mesh::One(nx) => R2cFftHandler::<f64>::new(nx),
+            Mesh::Two(_, ny) => R2cFftHandler::<f64>::new(ny),
+            Mesh::Three(_, _, nz) => R2cFftHandler::<f64>::new(nz),
         };
 
         let c2c_handlers = mesh
             .dimensions()
             .iter()
-            .take(mesh.n_dim() - 1)
-            .map(|dim| match &normalization {
-                Some(norm) => FftHandler::<f64>::new(*dim).normalization(norm.clone()),
-                None => FftHandler::<f64>::new(*dim),
-            })
+            .take(mesh.ndim() - 1)
+            .map(|dim| FftHandler::<f64>::new(*dim))
             .collect();
 
-        let k_mesh = mesh.to_complex();
-        let work1 = CField::zeros(IxDyn(k_mesh.dimensions()));
-        let work2 = CField::zeros(IxDyn(k_mesh.dimensions()));
+        let kmesh = mesh.kmesh();
+        let work1 = CField::zeros(kmesh);
+        let work2 = CField::zeros(kmesh);
 
         Self {
             r2c_handler,
@@ -46,13 +43,13 @@ impl FFT {
         }
     }
 
-    pub fn n_dim(&self) -> usize {
+    pub fn ndim(&self) -> usize {
         self.c2c_handlers.len() + 1
     }
 
     pub fn forward(&mut self, input: &RField, output: &mut CField) {
         // Transform the real -> complex dimension first
-        let r2c_axis = self.n_dim() - 1;
+        let r2c_axis = self.ndim() - 1;
         ndfft_r2c(input, output, &mut self.r2c_handler, r2c_axis);
 
         // Transform the remaining complex -> complex axes
@@ -73,7 +70,7 @@ impl FFT {
         }
 
         // Transform the accumulated work into the output array
-        let r2c_axis = self.n_dim() - 1;
+        let r2c_axis = self.ndim() - 1;
         ndifft_r2c(&self.work2, output, &mut self.r2c_handler, r2c_axis);
     }
 }
@@ -81,26 +78,30 @@ impl FFT {
 #[cfg(test)]
 mod tests {
     use crate::{
-        domain::{fft::FFT, mesh::Mesh},
+        domain::{Mesh, FFT},
         prelude::{CField, RField},
     };
 
     #[test]
     fn test_fft() {
-        let mesh = Mesh::new(vec![4, 4]);
+        let meshes = vec![Mesh::One(4), Mesh::Two(4, 4), Mesh::Three(4, 4, 4)];
 
-        let mut fft = FFT::new(&mesh, None);
+        meshes.iter().cloned().for_each(|mesh| {
+            let mut fft = FFT::new(mesh);
 
-        let mut input = RField::zeros(mesh.dimensions());
-        for (i, v) in input.iter_mut().enumerate() {
-            *v = i as f64;
-        }
-        let mut output = CField::zeros(mesh.to_complex().dimensions());
+            let mut input = RField::zeros(mesh);
+            let mut output = RField::zeros(mesh);
+            for (i, v) in input.iter_mut().enumerate() {
+                *v = i as f64;
+            }
+            let mut work = CField::zeros(mesh.kmesh());
 
-        fft.forward(&input, &mut output);
-        fft.inverse(&output, &mut input);
+            // Run a forward and inverse FFT on the input
+            fft.forward(&input, &mut work);
+            fft.inverse(&work, &mut output);
 
-        println!("{}", input);
-        println!("{}", output);
+            // Input and output should be approx equal after round-trip FFT
+            assert!(input.abs_diff_eq(&output, 1e-8));
+        });
     }
 }

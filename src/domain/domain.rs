@@ -1,6 +1,7 @@
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::prelude::RField;
 
+#[derive(Debug, Clone)]
 pub struct Domain {
     mesh: Mesh,
     cell: UnitCell,
@@ -9,7 +10,7 @@ pub struct Domain {
 
 impl Domain {
     pub fn new(mesh: Mesh, cell: UnitCell) -> Self {
-        let ksq = RField::zeros(mesh.to_complex().dimensions());
+        let ksq = RField::zeros(mesh.kmesh());
         Self { mesh, cell, ksq }
     }
 
