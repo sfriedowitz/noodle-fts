@@ -2,7 +2,8 @@ use ndarray::IxDyn;
 use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, Normalization, R2cFftHandler};
 use num::complex::Complex64;
 
-use super::{mesh::Mesh, CField, RField};
+use super::mesh::Mesh;
+use crate::prelude::{CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
@@ -79,7 +80,10 @@ impl FFT {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::{fft::FFT, mesh::Mesh, CField, RField};
+    use crate::{
+        domain::{fft::FFT, mesh::Mesh},
+        prelude::{CField, RField},
+    };
 
     #[test]
     fn test_fft() {

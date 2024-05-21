@@ -1,3 +1,7 @@
+#![allow(unused)]
+
 pub mod chem;
 pub mod domain;
-pub mod math;
+mod error;
+mod math;
+mod prelude;

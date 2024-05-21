@@ -1,15 +1,19 @@
 [package]
-name = "rfts"
+name = "fts"
 version = "0.1.0"
 edition = "2021"
 authors = ["Sean Friedowitz"]
 readme = "README.md"
 
+[features]
+"openblas" = ["ndarray-linalg/openblas-system"]
+
 [dependencies]
 float-cmp = "0.9.0"
 ndarray = "0.15.6"
-ndarray-linalg = { version = "0.16.0", features = ["openblas-system"] }
+ndarray-linalg = { version = "0.16.0" }
 ndarray-rand = "0.14.0"
 ndrustfft = "0.4.4"
 num = "0.4.2"
 rand = "0.8.5"
+thiserror = "1.0.61"

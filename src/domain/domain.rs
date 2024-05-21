@@ -1,4 +1,5 @@
-use super::{cell::UnitCell, mesh::Mesh, RField};
+use super::{cell::UnitCell, mesh::Mesh};
+use crate::prelude::RField;
 
 pub struct Domain {
     mesh: Mesh,
