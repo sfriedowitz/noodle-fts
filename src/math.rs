@@ -16,19 +16,14 @@ pub fn fftshift_index(idx: usize, n: usize) -> f64 {
 
 pub fn fftfreq(n: usize, d: Option<f64>) -> Array1<f64> {
     let d = d.unwrap_or(1.0);
-    let f = Array1::from_shape_fn((n), |i| {
-        if (i <= n / 2 - 1) {
-            i as f64
-        } else {
-            i as f64 - n as f64
-        }
-    });
-    f / (d * n as f64)
+    let norm = d * n as f64;
+    Array1::from_shape_fn((n), |i| fftshift_index(i, n)) / norm
 }
 
 pub fn rfftfreq(n: usize, d: Option<f64>) -> Array1<f64> {
     let d = d.unwrap_or(1.0);
-    Array1::from_shape_fn((n / 2 + 1), |i| i as f64) / (d * n as f64)
+    let norm = d * n as f64;
+    Array1::from_shape_fn((n / 2 + 1), |i| i as f64) / norm
 }
 
 #[cfg(test)]

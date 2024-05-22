@@ -6,6 +6,8 @@ pub enum FTSError {
     DimensionMismatch(usize, usize),
     #[error("validation failure -- {0}")]
     Validation(String),
+    #[error("generic error: {0}")]
+    Generic(String),
 }
 
 pub type Result<T> = core::result::Result<T, FTSError>;

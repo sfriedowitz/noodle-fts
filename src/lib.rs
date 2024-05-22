@@ -3,6 +3,6 @@
 mod chem;
 mod domain;
 mod error;
-mod field;
+mod fields;
 mod math;
 mod solvers;

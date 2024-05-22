@@ -1,7 +1,9 @@
+use std::fmt;
+
 use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, R2cFftHandler};
 
 use super::Mesh;
-use crate::field::{CField, RField};
+use crate::fields::{CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
@@ -74,11 +76,17 @@ impl FFT {
     }
 }
 
+impl fmt::Debug for FFT {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FFT").field("ndim", &self.ndim()).finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         domain::{Mesh, FFT},
-        field::{CField, RField},
+        fields::{CField, RField},
     };
 
     #[test]

@@ -7,11 +7,13 @@ use crate::error::{FTSError, Result};
 
 #[enum_dispatch]
 pub trait SpeciesDescription {
+    fn fraction(&self) -> f64;
+
+    fn size(&self, monomers: &[Monomer]) -> f64;
+
     fn monomer_ids(&self) -> HashSet<usize>;
 
     fn monomer_fraction(&self, id: usize) -> f64;
-
-    fn size(&self, monomers: &[Monomer]) -> f64;
 }
 
 /// Enumeration of molecular species types.
@@ -27,16 +29,32 @@ pub enum Species {
 
 #[derive(Debug, Clone)]
 pub struct Point {
+    fraction: f64,
     monomer_id: usize,
 }
 
 impl Point {
-    pub fn new(monomer_id: usize) -> Self {
-        Self { monomer_id }
+    pub fn new(monomer_id: usize, fraction: f64) -> Self {
+        Self {
+            monomer_id,
+            fraction,
+        }
+    }
+
+    pub fn monomer_id(&self) -> usize {
+        self.monomer_id
     }
 }
 
 impl SpeciesDescription for Point {
+    fn fraction(&self) -> f64 {
+        self.fraction
+    }
+
+    fn size(&self, monomers: &[Monomer]) -> f64 {
+        monomers[self.monomer_id].size
+    }
+
     fn monomer_ids(&self) -> HashSet<usize> {
         let mut m = HashSet::new();
         m.insert(self.monomer_id);
@@ -50,27 +68,25 @@ impl SpeciesDescription for Point {
             0.0
         }
     }
-
-    fn size(&self, monomers: &[Monomer]) -> f64 {
-        monomers[self.monomer_id].size
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Polymer {
-    blocks: Vec<Block>,
+    fraction: f64,
     contour_steps: usize,
+    blocks: Vec<Block>,
 }
 
 impl Polymer {
-    pub fn new(blocks: Vec<Block>, contour_steps: usize) -> Result<Self> {
+    pub fn new(fraction: f64, contour_steps: usize, blocks: Vec<Block>) -> Result<Self> {
         match blocks.len() {
             0 => Err(FTSError::Validation(
                 "Polymer must contain at least one block".into(),
             )),
             _ => Ok(Self {
-                blocks,
+                fraction,
                 contour_steps,
+                blocks,
             }),
         }
     }
@@ -86,6 +102,17 @@ impl Polymer {
 }
 
 impl SpeciesDescription for Polymer {
+    fn fraction(&self) -> f64 {
+        self.fraction
+    }
+
+    fn size(&self, monomers: &[Monomer]) -> f64 {
+        self.blocks
+            .iter()
+            .map(|b| monomers[b.monomer_id].size * (b.repeat_units as f64))
+            .sum()
+    }
+
     fn monomer_ids(&self) -> HashSet<usize> {
         self.blocks.iter().map(|b| b.monomer_id).collect()
     }
@@ -98,13 +125,6 @@ impl SpeciesDescription for Polymer {
             .sum();
         total / self.nblock() as f64
     }
-
-    fn size(&self, monomers: &[Monomer]) -> f64 {
-        self.blocks
-            .iter()
-            .map(|b| monomers[b.monomer_id].size * (b.repeat_units as f64))
-            .sum()
-    }
 }
 
 #[cfg(test)]
@@ -116,7 +136,7 @@ mod tests {
     #[test]
     fn test_point_species() {
         let monomer = Monomer::new(0, 1.0);
-        let species: Species = Point::new(monomer.id).into();
+        let species: Species = Point::new(monomer.id, 1.0).into();
 
         let expected_ids = HashSet::from([monomer.id]);
         assert!(species.monomer_ids() == expected_ids);
@@ -135,7 +155,9 @@ mod tests {
         let block_a = Block::new(monomer_a.id, 100, 1.0);
         let block_b = Block::new(monomer_b.id, 100, 1.0);
 
-        let species: Species = Polymer::new(vec![block_a, block_b], 100).unwrap().into();
+        let species: Species = Polymer::new(1.0, 100, vec![block_a, block_b])
+            .unwrap()
+            .into();
 
         let expected_ids = HashSet::from([monomer_a.id, monomer_b.id]);
         assert!(species.monomer_ids() == expected_ids);

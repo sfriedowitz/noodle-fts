@@ -4,7 +4,7 @@ use ndarray::{Array1, Array2, Array3};
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
     error::{FTSError, Result},
-    field::RField,
+    fields::RField,
     math::{fftshift_index, TWO_PI},
 };
 
@@ -12,7 +12,6 @@ use crate::{
 pub struct Domain {
     mesh: Mesh,
     cell: UnitCell,
-    ksq: RField,
 }
 
 impl Domain {
@@ -20,8 +19,7 @@ impl Domain {
         if mesh.ndim() != cell.ndim() {
             Err(FTSError::DimensionMismatch(mesh.ndim(), cell.ndim()))
         } else {
-            let ksq = RField::zeros(mesh.kmesh());
-            Ok(Self { mesh, cell, ksq })
+            Ok(Self { mesh, cell })
         }
     }
 
@@ -83,7 +81,7 @@ mod tests {
     #[test]
     fn test_ksq() {
         let mesh = Mesh::Two(128, 128);
-        let cell = UnitCell::new(CellParameters::Square(10.0)).unwrap();
+        let cell = UnitCell::new(CellParameters::Hexagonal(10.0)).unwrap();
 
         let domain = Domain::new(mesh, cell).unwrap();
 
