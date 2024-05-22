@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use ndarray::Zip;
 
 use crate::{
@@ -14,29 +15,29 @@ pub enum StepMethod {
 
 #[derive(Debug)]
 struct PropagatorStep {
-    // Method
-    method: StepMethod,
+    fft: FFT,
     // Operator arrays
-    lw1: RField,
-    lw2: RField,
-    lk1: RField,
-    lk2: RField,
-    // Work arrays
+    lw_full: RField,
+    lw_half: RField,
+    lk_full: RField,
+    lk_half: RField,
+    // Ouptut arrays
     q_full: RField,
     q_double_half: RField,
+    // Work arrays
     work_real: RField,
     work_complex: CField,
 }
 
 impl PropagatorStep {
-    fn new(mesh: Mesh, method: StepMethod) -> Self {
+    fn new(mesh: Mesh) -> Self {
         let kmesh = mesh.kmesh();
         Self {
-            method,
-            lw1: RField::zeros(mesh),
-            lw2: RField::zeros(mesh),
-            lk1: RField::zeros(kmesh),
-            lk2: RField::zeros(kmesh),
+            fft: FFT::new(mesh),
+            lw_full: RField::zeros(mesh),
+            lw_half: RField::zeros(mesh),
+            lk_full: RField::zeros(kmesh),
+            lk_half: RField::zeros(kmesh),
             q_full: RField::zeros(mesh),
             q_double_half: RField::zeros(mesh),
             work_real: RField::zeros(mesh),
@@ -44,91 +45,80 @@ impl PropagatorStep {
         }
     }
 
-    fn update(
-        &mut self,
-        field: &RField,
-        ksq: &RField,
-        monomer_size: f64,
-        segment_length: f64,
-        ds: f64,
-    ) {
-        todo!()
-    }
-
-    fn step(&mut self, fft: &mut FFT, qin: &RField, qout: &mut RField) {
-        match self.method {
+    fn apply(&mut self, q_in: &RField, q_out: &mut RField, method: StepMethod) {
+        match method {
             StepMethod::RK2 => {
-                // Full step into q_full
-                self.step_full(fft, qin);
+                // Full step to populate q_full
+                self.step_full(q_in);
                 // Copy into output array
-                qout.assign(&self.q_full)
+                q_out.assign(&self.q_full)
             }
             StepMethod::RQM4 => {
                 // Full step and double-half step to populate q_full and q_double_half
-                self.step_full(fft, qin);
-                self.step_double_half(fft, qin);
+                self.step_full(q_in);
+                self.step_double_half(q_in);
                 // Richardson extrapolation of the results
-                Zip::from(qout)
+                Zip::from(q_out)
                     .and(&self.q_full)
                     .and(&self.q_double_half)
-                    .for_each(|output, qf, qdh| *output = (4.0 * qdh - qf) / 3.0);
+                    .for_each(|out, qf, qdh| *out = (4.0 * qdh - qf) / 3.0);
             }
         }
     }
 
-    fn step_full(&mut self, fft: &mut FFT, qin: &RField) {
-        // Apply lw1 operator to qin, store in work_real
-        apply_operator(&self.lw1, qin, &mut self.work_real);
+    fn step_full(&mut self, q_in: &RField) {
+        // Apply lw_full to q_in, store in work_real
+        apply_operator(&self.lw_full, q_in, &mut self.work_real);
 
         // Forward FFT into work_complex
-        fft.forward(&self.work_real, &mut self.work_complex);
+        self.fft.forward(&self.work_real, &mut self.work_complex);
 
-        // Apply lk1 to work_complex
-        apply_operator_inplace(&self.lk1, &mut self.work_complex);
+        // Apply lk_full to work_complex
+        apply_operator_inplace(&self.lk_full, &mut self.work_complex);
 
         // Inverse FFT into work_real
-        fft.inverse(&self.work_complex, &mut self.work_real);
+        self.fft.inverse(&self.work_complex, &mut self.work_real);
 
-        // Apply lw1 operator to work_real, store in q_full
-        apply_operator(&self.lw1, &self.work_real, &mut self.q_full);
+        // Apply lw_full operator to work_real, store in q_full
+        apply_operator(&self.lw_full, &self.work_real, &mut self.q_full);
     }
 
-    fn step_double_half(&mut self, fft: &mut FFT, qin: &RField) {
-        // Apply lw2 operator to qin, store in work_real
-        apply_operator(&self.lw2, qin, &mut self.work_real);
+    fn step_double_half(&mut self, q_in: &RField) {
+        // Apply lw_half to q_in, store in work_real
+        apply_operator(&self.lw_half, q_in, &mut self.work_real);
 
         // Forward FFT into work_complex
-        fft.forward(&self.work_real, &mut self.work_complex);
+        self.fft.forward(&self.work_real, &mut self.work_complex);
 
-        // Apply lk2 to work_complex
-        apply_operator_inplace(&self.lk2, &mut self.work_complex);
+        // Apply lk_half to work_complex
+        apply_operator_inplace(&self.lk_half, &mut self.work_complex);
 
         // Inverse FFT into work_real
-        fft.inverse(&self.work_complex, &mut self.work_real);
+        self.fft.inverse(&self.work_complex, &mut self.work_real);
 
-        // Apply lw1 to work_real
-        apply_operator_inplace(&self.lw1, &mut self.work_real);
+        // Apply lw_full to work_real
+        apply_operator_inplace(&self.lw_full, &mut self.work_real);
 
         // Forward FFT into work_complex
-        fft.forward(&self.work_real, &mut self.work_complex);
+        self.fft.forward(&self.work_real, &mut self.work_complex);
 
-        // Apply lk2 to work_complex
-        apply_operator_inplace(&self.lk2, &mut self.work_complex);
+        // Apply lk_half to work_complex
+        apply_operator_inplace(&self.lk_half, &mut self.work_complex);
 
         // Inverse FFT into work_real
-        fft.inverse(&self.work_complex, &mut self.work_real);
+        self.fft.inverse(&self.work_complex, &mut self.work_real);
 
-        // Apply lw2 operator to work_real, store in q_double_half
-        apply_operator(&self.lw2, &self.work_real, &mut self.q_double_half);
+        // Apply lw_half operator to work_real, store in q_double_half
+        apply_operator(&self.lw_half, &self.work_real, &mut self.q_double_half);
     }
 }
 
 #[derive(Debug)]
 pub struct BlockPropagator {
-    fft: FFT,
+    qs: Vec<RField>,
     step: PropagatorStep,
-    solutions: Vec<RField>,
     step_size: f64,
+    monomer_id: usize,
     monomer_size: f64,
     segment_length: f64,
 }
@@ -138,9 +128,62 @@ impl BlockPropagator {
         mesh: Mesh,
         nstep: usize,
         step_size: f64,
+        monomer_id: usize,
         monomer_size: f64,
         segment_length: f64,
     ) -> Self {
-        todo!()
+        let qs = (0..nstep + 1).map(|_| RField::zeros(mesh)).collect();
+        let step = PropagatorStep::new(mesh);
+        Self {
+            qs,
+            step,
+            step_size,
+            monomer_id,
+            monomer_size,
+            segment_length,
+        }
+    }
+
+    pub fn qs(&self) -> &[RField] {
+        &self.qs
+    }
+
+    pub fn update_operators(&mut self, fields: &[RField], ksq: &RField) {
+        let field = &fields[self.monomer_id];
+        let lw_coeff = self.step_size / 2.0;
+        let ld_coeff = self.step_size * self.segment_length.powf(2.0) / 6.0;
+
+        // Update w-operators
+        Zip::from(&mut self.step.lw_full)
+            .and(&mut self.step.lw_half)
+            .and(field)
+            .for_each(|full, half, omega| {
+                *full = (-lw_coeff * self.monomer_size * omega).exp();
+                *half = (-lw_coeff * self.monomer_size * omega / 2.0).exp();
+            });
+
+        // Update k-operators
+        Zip::from(&mut self.step.lk_full)
+            .and(&mut self.step.lk_half)
+            .and(ksq)
+            .for_each(|full, half, ksq| {
+                *full = (-ld_coeff * ksq).exp();
+                *half = (-ld_coeff * ksq / 2.0).exp();
+            });
+    }
+
+    pub fn propagate(&mut self, q_initial: Option<&RField>) {
+        if let Some(qi) = q_initial {
+            self.qs[0].assign(qi);
+        } else {
+            self.qs[0].fill(1.0);
+        }
+
+        (1..self.qs.len()).for_each(|s| {
+            let (left, right) = self.qs.split_at_mut(s);
+            let q_in = &left[left.len() - 1];
+            let q_out = &mut right[0];
+            self.step.apply(q_in, q_out, StepMethod::RQM4);
+        })
     }
 }

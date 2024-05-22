@@ -5,7 +5,8 @@ use crate::{chem::Polymer, domain::Mesh};
 pub struct PolymerSolver {
     polymer: Polymer,
     state: SolverState,
-    propagators: Vec<BlockPropagator>,
+    forward_propagators: Vec<BlockPropagator>,
+    reverse_propagators: Vec<BlockPropagator>,
 }
 
 impl PolymerSolver {
