@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn test_ksq() {
         let mesh = Mesh::Two(128, 128);
-        let cell = UnitCell::new(CellParameters::Hexagonal(10.0)).unwrap();
+        let cell = UnitCell::hexagonal_2d(10.0).unwrap();
 
         let domain = Domain::new(mesh, cell).unwrap();
 

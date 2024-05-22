@@ -10,10 +10,13 @@ pub enum Ensemble {
 }
 
 pub struct System {
+    ensemble: Ensemble,
     domain: Domain,
     monomers: Vec<Monomer>,
     species: Vec<Species>,
+    solvers: Vec<SpeciesSolver>,
     fields: Vec<RField>,
+    density: Vec<RField>,
 }
 
 impl System {

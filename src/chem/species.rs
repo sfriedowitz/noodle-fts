@@ -9,11 +9,9 @@ use crate::error::{FTSError, Result};
 pub trait SpeciesDescription {
     fn fraction(&self) -> f64;
 
-    fn size(&self, monomers: &[Monomer]) -> f64;
-
-    fn monomer_ids(&self) -> HashSet<usize>;
-
     fn monomer_fraction(&self, id: usize) -> f64;
+
+    fn size(&self, monomers: &[Monomer]) -> f64;
 }
 
 /// Enumeration of molecular species types.
@@ -51,22 +49,16 @@ impl SpeciesDescription for Point {
         self.fraction
     }
 
-    fn size(&self, monomers: &[Monomer]) -> f64 {
-        monomers[self.monomer_id].size
-    }
-
-    fn monomer_ids(&self) -> HashSet<usize> {
-        let mut m = HashSet::new();
-        m.insert(self.monomer_id);
-        m
-    }
-
     fn monomer_fraction(&self, id: usize) -> f64 {
         if id == self.monomer_id {
             1.0
         } else {
             0.0
         }
+    }
+
+    fn size(&self, monomers: &[Monomer]) -> f64 {
+        monomers[self.monomer_id].size
     }
 }
 
@@ -99,22 +91,15 @@ impl Polymer {
         self.blocks.push(block);
         self
     }
+
+    pub fn monomer_ids(&self) -> HashSet<usize> {
+        self.blocks.iter().map(|b| b.monomer_id).collect()
+    }
 }
 
 impl SpeciesDescription for Polymer {
     fn fraction(&self) -> f64 {
         self.fraction
-    }
-
-    fn size(&self, monomers: &[Monomer]) -> f64 {
-        self.blocks
-            .iter()
-            .map(|b| monomers[b.monomer_id].size * (b.repeat_units as f64))
-            .sum()
-    }
-
-    fn monomer_ids(&self) -> HashSet<usize> {
-        self.blocks.iter().map(|b| b.monomer_id).collect()
     }
 
     fn monomer_fraction(&self, id: usize) -> f64 {
@@ -125,11 +110,17 @@ impl SpeciesDescription for Polymer {
             .sum();
         total / self.nblock() as f64
     }
+
+    fn size(&self, monomers: &[Monomer]) -> f64 {
+        self.blocks
+            .iter()
+            .map(|b| monomers[b.monomer_id].size * (b.repeat_units as f64))
+            .sum()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
 
     use crate::chem::{Block, Monomer, Point, Polymer, Species, SpeciesDescription};
 
@@ -137,9 +128,6 @@ mod tests {
     fn test_point_species() {
         let monomer = Monomer::new(0, 1.0);
         let species: Species = Point::new(monomer.id, 1.0).into();
-
-        let expected_ids = HashSet::from([monomer.id]);
-        assert!(species.monomer_ids() == expected_ids);
 
         assert!(species.monomer_fraction(monomer.id) == 1.0);
         assert!(species.monomer_fraction(1) == 0.0);
@@ -158,9 +146,6 @@ mod tests {
         let species: Species = Polymer::new(1.0, 100, vec![block_a, block_b])
             .unwrap()
             .into();
-
-        let expected_ids = HashSet::from([monomer_a.id, monomer_b.id]);
-        assert!(species.monomer_ids() == expected_ids);
 
         assert!(species.monomer_fraction(monomer_a.id) == 0.5);
         assert!(species.monomer_fraction(monomer_b.id) == 0.5);

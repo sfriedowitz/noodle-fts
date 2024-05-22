@@ -1,5 +1,5 @@
 use super::{solver::SolverOps, BlockPropagator, SolverInput, SolverState};
-use crate::{chem::Polymer, domain::Mesh, error::Result};
+use crate::{chem::Polymer, domain::Mesh};
 
 #[derive(Debug)]
 pub struct PolymerSolver {
@@ -19,7 +19,7 @@ impl SolverOps for PolymerSolver {
         &self.state
     }
 
-    fn update_state<'a>(&mut self, input: &SolverInput<'a>) -> Result<()> {
+    fn update_state<'a>(&mut self, input: &SolverInput<'a>) {
         todo!()
     }
 }

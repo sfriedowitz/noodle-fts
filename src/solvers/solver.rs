@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use enum_dispatch::enum_dispatch;
 
 use super::{PointSolver, PolymerSolver};
-use crate::{chem::Monomer, error::Result, fields::RField};
+use crate::{chem::Monomer, fields::RField};
 
 #[enum_dispatch]
 pub trait SolverOps {
     fn state(&self) -> &SolverState;
 
-    fn update_state<'a>(&mut self, input: &SolverInput<'a>) -> Result<()>;
+    fn update_state<'a>(&mut self, input: &SolverInput<'a>);
 }
 
 #[enum_dispatch(SolverOps)]
