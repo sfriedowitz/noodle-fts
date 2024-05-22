@@ -1,9 +1,7 @@
-use ndarray::IxDyn;
-use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, Normalization, R2cFftHandler};
-use num::complex::Complex64;
+use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, R2cFftHandler};
 
 use super::Mesh;
-use crate::prelude::{CField, FTSError, RField, Result};
+use crate::field::{CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
@@ -18,6 +16,7 @@ pub struct FFT {
 
 impl FFT {
     pub fn new(mesh: Mesh) -> Self {
+        // This creates a half-dimension r2c handler when providing the full value of n
         let r2c_handler = match mesh {
             Mesh::One(nx) => R2cFftHandler::<f64>::new(nx),
             Mesh::Two(_, ny) => R2cFftHandler::<f64>::new(ny),
@@ -79,7 +78,7 @@ impl FFT {
 mod tests {
     use crate::{
         domain::{Mesh, FFT},
-        prelude::{CField, RField},
+        field::{CField, RField},
     };
 
     #[test]

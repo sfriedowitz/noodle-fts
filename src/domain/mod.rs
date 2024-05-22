@@ -1,5 +1,3 @@
-use ndarray::ArrayD;
-
 mod cell;
 mod domain;
 mod fft;

@@ -1,9 +1,11 @@
 #[derive(thiserror::Error, Debug)]
 pub enum FTSError {
-    #[error("Linalg: {0}")]
+    #[error("linear algebra error")]
     Linalg(#[from] ndarray_linalg::error::LinalgError),
-    #[error("Validation: {0}")]
+    #[error("number of dimensions do not match: {0} != {1}")]
+    DimensionMismatch(usize, usize),
+    #[error("validation failure -- {0}")]
     Validation(String),
-    #[error("Generic: {0}")]
-    Generic(String),
 }
+
+pub type Result<T> = core::result::Result<T, FTSError>;

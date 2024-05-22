@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use enum_dispatch::enum_dispatch;
 
 use super::{block::Block, monomer::Monomer};
-use crate::prelude::{FTSError, Result};
+use crate::error::{FTSError, Result};
 
 #[enum_dispatch]
 pub trait SpeciesDescription {

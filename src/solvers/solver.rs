@@ -1,4 +1,4 @@
-use crate::{chem::Monomer, prelude::RField};
+use crate::{chem::Monomer, field::RField};
 
 pub struct SolverInput<'a> {
     monomers: &'a [Monomer],

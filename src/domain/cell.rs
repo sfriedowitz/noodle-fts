@@ -3,8 +3,8 @@ use ndarray::{array, Array2};
 use ndarray_linalg::Inverse;
 
 use crate::{
-    math::{PI2, PI3},
-    prelude::Result,
+    error::Result,
+    math::{HALF_PI, THIRD_PI},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -41,16 +41,16 @@ impl UnitCell {
 
         let shape = match parameters {
             Lamellar(a) => Self::shape_1d(a),
-            Square(a) => Self::shape_2d(a, a, PI2),
-            Rectangular(a, b) => Self::shape_2d(a, b, PI2),
-            Hexagonal(a) => Self::shape_2d(a, a, PI3),
+            Square(a) => Self::shape_2d(a, a, HALF_PI),
+            Rectangular(a, b) => Self::shape_2d(a, b, HALF_PI),
+            Hexagonal(a) => Self::shape_2d(a, a, THIRD_PI),
             Oblique(a, b, gamma) => Self::shape_2d(a, b, gamma),
-            Cubic(a) => Self::shape_3d(a, a, a, PI2, PI2, PI2),
-            Tetragonal(a, c) => Self::shape_3d(a, a, c, PI2, PI2, PI2),
-            Orthorhombic(a, b, c) => Self::shape_3d(a, b, c, PI2, PI2, PI2),
+            Cubic(a) => Self::shape_3d(a, a, a, HALF_PI, HALF_PI, HALF_PI),
+            Tetragonal(a, c) => Self::shape_3d(a, a, c, HALF_PI, HALF_PI, HALF_PI),
+            Orthorhombic(a, b, c) => Self::shape_3d(a, b, c, HALF_PI, HALF_PI, HALF_PI),
             Trigonal(a, alpha) => Self::shape_3d(a, a, a, alpha, alpha, alpha),
-            Hexagonal3D(a, c) => Self::shape_3d(a, a, c, PI2, PI2, PI3),
-            Monoclinic(a, b, c, beta) => Self::shape_3d(a, b, c, PI2, beta, PI2),
+            Hexagonal3D(a, c) => Self::shape_3d(a, a, c, HALF_PI, HALF_PI, THIRD_PI),
+            Monoclinic(a, b, c, beta) => Self::shape_3d(a, b, c, HALF_PI, beta, HALF_PI),
             Triclinic(a, b, c, alpha, beta, gamma) => Self::shape_3d(a, b, c, alpha, beta, gamma),
         };
 
@@ -96,7 +96,7 @@ impl UnitCell {
     }
 
     fn shape_2d(a: f64, b: f64, gamma: f64) -> Array2<f64> {
-        let (cos_gamma, sin_gamma) = if approx_eq!(f64, gamma, PI2) {
+        let (cos_gamma, sin_gamma) = if approx_eq!(f64, gamma, HALF_PI) {
             (0.0, 1.0)
         } else {
             (gamma.cos(), gamma.sin())
@@ -109,17 +109,17 @@ impl UnitCell {
     }
 
     fn shape_3d(a: f64, b: f64, c: f64, alpha: f64, beta: f64, gamma: f64) -> Array2<f64> {
-        let cos_alpha = if approx_eq!(f64, alpha, PI2) {
+        let cos_alpha = if approx_eq!(f64, alpha, HALF_PI) {
             0.0
         } else {
             alpha.cos()
         };
-        let cos_beta = if approx_eq!(f64, beta, PI2) {
+        let cos_beta = if approx_eq!(f64, beta, HALF_PI) {
             0.0
         } else {
             beta.cos()
         };
-        let (cos_gamma, sin_gamma) = if approx_eq!(f64, gamma, PI2) {
+        let (cos_gamma, sin_gamma) = if approx_eq!(f64, gamma, HALF_PI) {
             (0.0, 1.0)
         } else {
             (gamma.cos(), gamma.sin())
@@ -142,7 +142,7 @@ mod tests {
     use ndarray::Array2;
 
     use super::{CellParameters, UnitCell};
-    use crate::math::PI2;
+    use crate::math::HALF_PI;
 
     fn check_cell_shape(cell: &UnitCell) {
         let eye = Array2::eye(cell.ndim());
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_2d() {
-        let parameters = CellParameters::Oblique(10.0, 5.0, PI2 - 0.1);
+        let parameters = CellParameters::Oblique(10.0, 5.0, HALF_PI - 0.1);
         let cell = UnitCell::new(parameters).unwrap();
         assert!(cell.ndim() == 2);
         check_cell_shape(&cell);
@@ -172,7 +172,8 @@ mod tests {
 
     #[test]
     fn test_3d() {
-        let parameters = CellParameters::Triclinic(10.0, 5.0, 2.0, PI2 - 0.1, PI2 + 0.1, PI2);
+        let parameters =
+            CellParameters::Triclinic(10.0, 5.0, 2.0, HALF_PI - 0.1, HALF_PI + 0.1, HALF_PI);
         let cell = UnitCell::new(parameters).unwrap();
         assert!(cell.ndim() == 3);
         check_cell_shape(&cell);

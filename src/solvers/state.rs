@@ -1,4 +1,4 @@
-use crate::prelude::RField;
+use crate::field::RField;
 
 pub struct PointState {
     density: RField,

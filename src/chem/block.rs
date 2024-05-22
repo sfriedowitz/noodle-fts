@@ -1,5 +1,3 @@
-use super::monomer::Monomer;
-
 #[derive(Debug, Clone, Copy)]
 pub struct Block {
     pub monomer_id: usize,
