@@ -1,11 +1,8 @@
-use std::{borrow::BorrowMut, collections::HashMap};
+use std::collections::HashMap;
 
 use ndarray::Zip;
 
-use super::{
-    solver::{SolverOps, SpeciesSolver},
-    SolverInput, SolverState,
-};
+use super::{solver::SolverOps, SolverInput, SolverState};
 use crate::{chem::Point, domain::Mesh, fields::RField};
 
 #[derive(Debug)]
@@ -16,10 +13,7 @@ pub struct PointSolver {
 
 impl PointSolver {
     pub fn new(point: Point, mesh: Mesh) -> Self {
-        let mut state = SolverState {
-            partition: 0.0,
-            density: HashMap::from([(point.monomer_id(), RField::zeros(mesh))]),
-        };
+        let state = SolverState::new(mesh, &[point.monomer_id()]);
         Self { point, state }
     }
 }
@@ -34,9 +28,9 @@ impl SolverOps for PointSolver {
 
         let monomer = input.monomers[monomer_id];
         let field = &input.fields[monomer_id];
-        let mut density = self.state.density.get_mut(&monomer_id).expect(&format!(
-            "monomer {monomer_id} density missing from solver state"
-        ));
+
+        // Field is created upon object construction
+        let mut density = self.state.density.get_mut(&monomer_id).unwrap();
 
         // Compute density field and partition function from omega field
         self.state.partition = 0.0;

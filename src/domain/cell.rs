@@ -153,7 +153,7 @@ impl UnitCell {
     pub fn new(parameters: CellParameters) -> Result<Self> {
         let shape = parameters.into_shape_tensor();
         let shape_inv = shape.inv()?;
-        let metric = shape.dot(&shape.t());
+        let metric = shape.t().dot(&shape);
         let metric_inv = metric.inv()?;
 
         Ok(Self {
@@ -262,7 +262,7 @@ impl UnitCell {
 mod tests {
     use ndarray::Array2;
 
-    use super::{CellParameters, UnitCell};
+    use super::UnitCell;
     use crate::math::{HALF_PI, THIRD_PI};
 
     fn check_cell_inverses(cell: &UnitCell) {

@@ -13,11 +13,8 @@ readme = "README.md"
 enum_dispatch = "0.3.13"
 float-cmp = "0.9.0"
 itertools = "0.13.0"
-ndarray = "0.15.6"
+ndarray = { version = "0.15.6", features = ["rayon"] }
 ndarray-linalg = { version = "0.16.0" }
-ndarray-rand = "0.14.0"
 ndrustfft = "0.4.4"
 num = "0.4.2"
-rand = "0.8.5"
-rayon = "1.10.0"
 thiserror = "1.0.61"

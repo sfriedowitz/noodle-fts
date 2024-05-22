@@ -1,12 +1,46 @@
-use itertools::iproduct;
-use ndarray::{Array1, Array2, Array3};
+use itertools::{iproduct, Itertools};
+use ndarray::{Array2, Axis};
 
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
     error::{FTSError, Result},
     fields::RField,
-    math::{fftshift_index, TWO_PI},
+    math::{fftfreq, rfftfreq, TWO_PI},
 };
+
+fn get_kvecs_1d(nx: usize) -> Array2<f64> {
+    let dx = 1.0 / (TWO_PI * nx as f64);
+    let freq_x = rfftfreq(nx, Some(dx));
+    iproduct!(freq_x).map(|(kx,)| [kx]).collect_vec().into()
+}
+
+fn get_kvecs_2d(nx: usize, ny: usize) -> Array2<f64> {
+    let dx = 1.0 / (TWO_PI * nx as f64);
+    let dy = 1.0 / (TWO_PI * ny as f64);
+
+    let freq_x = fftfreq(nx, Some(dx));
+    let freq_y = rfftfreq(ny, Some(dy));
+
+    iproduct!(freq_x, freq_y)
+        .map(|(kx, ky)| [kx, ky])
+        .collect_vec()
+        .into()
+}
+
+fn get_kvecs_3d(nx: usize, ny: usize, nz: usize) -> Array2<f64> {
+    let dx = 1.0 / (TWO_PI * nx as f64);
+    let dy = 1.0 / (TWO_PI * ny as f64);
+    let dz = 1.0 / (TWO_PI * nz as f64);
+
+    let freq_x = fftfreq(nx, Some(dx));
+    let freq_y = fftfreq(ny, Some(dy));
+    let freq_z = rfftfreq(nz, Some(dz));
+
+    iproduct!(freq_x, freq_y, freq_z)
+        .map(|(kx, ky, kz)| [kx, ky, kz])
+        .collect_vec()
+        .into()
+}
 
 #[derive(Debug, Clone)]
 pub struct Domain {
@@ -17,10 +51,9 @@ pub struct Domain {
 impl Domain {
     pub fn new(mesh: Mesh, cell: UnitCell) -> Result<Self> {
         if mesh.ndim() != cell.ndim() {
-            Err(FTSError::DimensionMismatch(mesh.ndim(), cell.ndim()))
-        } else {
-            Ok(Self { mesh, cell })
+            return Err(FTSError::DimensionMismatch("mesh".into(), "cell".into()));
         }
+        Ok(Self { mesh, cell })
     }
 
     pub fn ndim(&self) -> usize {
@@ -31,43 +64,18 @@ impl Domain {
         self.mesh.size()
     }
 
-    pub fn ksq(&self) -> RField {
-        let metric_inv = self.cell.metric_inv();
-        match self.mesh.kmesh() {
-            Mesh::One(nx_half) => {
-                let mut kvec = Array1::zeros(1);
-                Array1::from_shape_fn((nx_half), |ix| {
-                    let jx = ix as f64;
-                    kvec[0] = TWO_PI * jx;
-                    kvec.dot(&metric_inv.dot(&kvec))
-                })
-                .into_dyn()
-            }
-            Mesh::Two(nx, ny_half) => {
-                let mut kvec = Array1::zeros(2);
-                Array2::from_shape_fn((nx, ny_half), |(ix, iy)| {
-                    let jx = fftshift_index(ix, nx);
-                    let jy = iy as f64;
-                    kvec[0] = TWO_PI * (ix as f64);
-                    kvec[1] = TWO_PI * (iy as f64);
-                    kvec.dot(&metric_inv.dot(&kvec))
-                })
-                .into_dyn()
-            }
-            Mesh::Three(nx, ny, nz_half) => {
-                let mut kvec = Array1::zeros(3);
-                Array3::from_shape_fn((nx, ny, nz_half), |(ix, iy, iz)| {
-                    let jx = fftshift_index(ix, nx);
-                    let jy = fftshift_index(iy, ny);
-                    let jz = iz as f64;
-                    kvec[0] = TWO_PI * (ix as f64);
-                    kvec[1] = TWO_PI * (iy as f64);
-                    kvec[2] = TWO_PI * (iz as f64);
-                    kvec.dot(&metric_inv.dot(&kvec))
-                })
-                .into_dyn()
-            }
-        }
+    pub fn ksq(&mut self) -> Result<RField> {
+        let kvecs = match self.mesh {
+            Mesh::One(nx) => get_kvecs_1d(nx),
+            Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),
+            Mesh::Three(nx, ny, nz) => get_kvecs_3d(nx, ny, nz),
+        };
+        let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
+
+        (kvecs * kvecs_scaled)
+            .sum_axis(Axis(1))
+            .into_shape(self.mesh.kmesh())
+            .map_err(FTSError::from)
     }
 }
 
@@ -76,20 +84,21 @@ mod tests {
     use std::time::Instant;
 
     use super::Domain;
-    use crate::domain::{CellParameters, Mesh, UnitCell};
+    use crate::domain::{Mesh, UnitCell};
 
     #[test]
     fn test_ksq() {
-        let mesh = Mesh::Two(128, 128);
-        let cell = UnitCell::hexagonal_2d(10.0).unwrap();
+        let mesh = Mesh::Two(64, 64);
+        let cell = UnitCell::hexagonal_2d(1.0).unwrap();
 
-        let domain = Domain::new(mesh, cell).unwrap();
+        let mut domain = Domain::new(mesh, cell).unwrap();
 
         let now = Instant::now();
-        let _ = domain.ksq();
+        let ksq = domain.ksq();
         let elapsed = now.elapsed();
 
-        // dbg!(domain);
+        // dbg!(ksq);
+
         dbg!(elapsed);
     }
 }

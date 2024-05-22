@@ -1,8 +1,8 @@
 #![allow(unused)]
 
-mod chem;
-mod domain;
-mod error;
-mod fields;
-mod math;
-mod solvers;
+pub mod chem;
+pub mod domain;
+pub mod error;
+pub mod fields;
+pub mod math;
+pub mod solvers;

@@ -27,8 +27,8 @@ pub enum Species {
 
 #[derive(Debug, Clone)]
 pub struct Point {
-    fraction: f64,
     monomer_id: usize,
+    fraction: f64,
 }
 
 impl Point {
@@ -64,23 +64,23 @@ impl SpeciesDescription for Point {
 
 #[derive(Debug, Clone)]
 pub struct Polymer {
-    fraction: f64,
-    contour_steps: usize,
     blocks: Vec<Block>,
+    contour_steps: usize,
+    fraction: f64,
 }
 
 impl Polymer {
-    pub fn new(fraction: f64, contour_steps: usize, blocks: Vec<Block>) -> Result<Self> {
-        match blocks.len() {
-            0 => Err(FTSError::Validation(
+    pub fn new(blocks: Vec<Block>, contour_steps: usize, fraction: f64) -> Result<Self> {
+        if blocks.is_empty() {
+            return Err(FTSError::Validation(
                 "Polymer must contain at least one block".into(),
-            )),
-            _ => Ok(Self {
-                fraction,
-                contour_steps,
-                blocks,
-            }),
+            ));
         }
+        Ok(Self {
+            blocks,
+            contour_steps,
+            fraction,
+        })
     }
 
     pub fn nblock(&self) -> usize {
@@ -143,7 +143,7 @@ mod tests {
         let block_a = Block::new(monomer_a.id, 100, 1.0);
         let block_b = Block::new(monomer_b.id, 100, 1.0);
 
-        let species: Species = Polymer::new(1.0, 100, vec![block_a, block_b])
+        let species: Species = Polymer::new(vec![block_a, block_b], 100, 1.0)
             .unwrap()
             .into();
 
