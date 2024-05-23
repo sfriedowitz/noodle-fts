@@ -3,7 +3,7 @@ use ndarray::{Array2, Axis};
 
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
-    error::{FTSError, Result},
+    error::{Error, Result},
     fields::RField,
     math::{fftfreq, rfftfreq, TWO_PI},
 };
@@ -51,7 +51,7 @@ pub struct Domain {
 impl Domain {
     pub fn new(mesh: Mesh, cell: UnitCell) -> Result<Self> {
         if mesh.ndim() != cell.ndim() {
-            return Err(FTSError::DimensionMismatch("mesh".into(), "cell".into()));
+            return Err(Error::DimensionMismatch("mesh".into(), "cell".into()));
         }
         Ok(Self { mesh, cell })
     }
@@ -75,7 +75,7 @@ impl Domain {
         (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
             .into_shape(self.mesh.kmesh())
-            .map_err(FTSError::from)
+            .map_err(Error::from)
     }
 }
 

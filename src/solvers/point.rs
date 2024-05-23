@@ -3,7 +3,11 @@ use std::collections::HashMap;
 use ndarray::Zip;
 
 use super::{solver::SolverOps, SolverInput, SolverState};
-use crate::{chem::Point, domain::Mesh, fields::RField};
+use crate::{
+    chem::{Point, Species, SpeciesDescription},
+    domain::Mesh,
+    fields::RField,
+};
 
 #[derive(Debug)]
 pub struct PointSolver {
@@ -13,12 +17,16 @@ pub struct PointSolver {
 
 impl PointSolver {
     pub fn new(point: Point, mesh: Mesh) -> Self {
-        let state = SolverState::new(mesh, [point.monomer_id()]);
+        let state = SolverState::new(mesh, point.monomer_ids());
         Self { point, state }
     }
 }
 
 impl SolverOps for PointSolver {
+    fn species(&self) -> Species {
+        self.point.into()
+    }
+
     fn state(&self) -> &SolverState {
         &self.state
     }
@@ -28,8 +36,6 @@ impl SolverOps for PointSolver {
 
         let monomer = input.monomers[monomer_id];
         let field = &input.fields[monomer_id];
-
-        // Field is created upon object construction
         let mut density = self.state.density.get_mut(&monomer_id).unwrap();
 
         // Compute density field and partition function from omega field

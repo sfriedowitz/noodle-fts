@@ -1,15 +1,17 @@
-#[derive(thiserror::Error, Debug)]
-pub enum FTSError {
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
     #[error("linear algebra error")]
-    Linalg(#[from] ndarray_linalg::error::LinalgError),
+    LinalgError(#[from] ndarray_linalg::error::LinalgError),
     #[error("shape error")]
     ShapeMismatch(#[from] ndarray::ShapeError),
     #[error("dimension mismatch between '{0}' and '{1}'")]
     DimensionMismatch(String, String),
     #[error("validation failure: {0}")]
-    Validation(String),
+    ValidationError(String),
     #[error("generic error: {0}")]
-    Generic(String),
+    GenericError(String),
 }
 
-pub type Result<T> = core::result::Result<T, FTSError>;
+pub type Result<T> = core::result::Result<T, Error>;

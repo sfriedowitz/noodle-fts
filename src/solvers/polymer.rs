@@ -1,9 +1,8 @@
 use super::{solver::SolverOps, BlockPropagator, SolverInput, SolverState};
-use crate::{chem::Polymer, domain::Mesh};
-
-fn build_propagators(polymer: &Polymer) -> Vec<BlockPropagator> {
-    todo!()
-}
+use crate::{
+    chem::{Polymer, Species, SpeciesDescription},
+    domain::Mesh,
+};
 
 #[derive(Debug)]
 pub struct PolymerSolver {
@@ -16,18 +15,16 @@ pub struct PolymerSolver {
 impl PolymerSolver {
     pub fn new(polymer: Polymer, mesh: Mesh) -> Self {
         let state = SolverState::new(mesh, polymer.monomer_ids());
-        let forward_propagators = build_propagators(&polymer);
-        let reverse_propagators = forward_propagators.iter().rev().cloned().collect();
-        Self {
-            polymer,
-            state,
-            forward_propagators,
-            reverse_propagators,
-        }
+
+        todo!()
     }
 }
 
 impl SolverOps for PolymerSolver {
+    fn species(&self) -> Species {
+        self.polymer.clone().into()
+    }
+
     fn state(&self) -> &SolverState {
         &self.state
     }

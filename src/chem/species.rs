@@ -3,11 +3,13 @@ use std::collections::HashSet;
 use enum_dispatch::enum_dispatch;
 
 use super::{block::Block, monomer::Monomer};
-use crate::error::{FTSError, Result};
+use crate::error::{Error, Result};
 
 #[enum_dispatch]
 pub trait SpeciesDescription {
     fn fraction(&self) -> f64;
+
+    fn monomer_ids(&self) -> HashSet<usize>;
 
     fn monomer_fraction(&self, id: usize) -> f64;
 
@@ -25,7 +27,7 @@ pub enum Species {
     Polymer,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Point {
     monomer_id: usize,
     fraction: f64,
@@ -47,6 +49,10 @@ impl Point {
 impl SpeciesDescription for Point {
     fn fraction(&self) -> f64 {
         self.fraction
+    }
+
+    fn monomer_ids(&self) -> HashSet<usize> {
+        HashSet::from([self.monomer_id])
     }
 
     fn monomer_fraction(&self, id: usize) -> f64 {
@@ -72,7 +78,7 @@ pub struct Polymer {
 impl Polymer {
     pub fn new(blocks: Vec<Block>, contour_steps: usize, fraction: f64) -> Result<Self> {
         if blocks.is_empty() {
-            return Err(FTSError::Validation(
+            return Err(Error::ValidationError(
                 "Polymer must contain at least one block".into(),
             ));
         }
@@ -91,15 +97,15 @@ impl Polymer {
         self.blocks.push(block);
         self
     }
-
-    pub fn monomer_ids(&self) -> HashSet<usize> {
-        self.blocks.iter().map(|b| b.monomer_id).collect()
-    }
 }
 
 impl SpeciesDescription for Polymer {
     fn fraction(&self) -> f64 {
         self.fraction
+    }
+
+    fn monomer_ids(&self) -> HashSet<usize> {
+        self.blocks.iter().map(|b| b.monomer_id).collect()
     }
 
     fn monomer_fraction(&self, id: usize) -> f64 {

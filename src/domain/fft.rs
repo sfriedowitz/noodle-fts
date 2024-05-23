@@ -94,7 +94,7 @@ mod tests {
     fn test_fft() {
         let meshes = vec![Mesh::One(4), Mesh::Two(4, 4), Mesh::Three(4, 4, 4)];
 
-        meshes.iter().cloned().for_each(|mesh| {
+        meshes.into_iter().for_each(|mesh| {
             let mut fft = FFT::new(mesh);
 
             let mut input = RField::zeros(mesh);
