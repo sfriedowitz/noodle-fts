@@ -64,7 +64,7 @@ impl Domain {
         self.mesh.size()
     }
 
-    pub fn ksq(&mut self) -> Result<RField> {
+    pub fn ksq(&self) -> Result<RField> {
         let kvecs = match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
             Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),

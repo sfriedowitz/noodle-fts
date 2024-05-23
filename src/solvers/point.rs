@@ -31,7 +31,7 @@ impl SolverOps for PointSolver {
         &self.state
     }
 
-    fn update_state<'a>(&mut self, input: &SolverInput<'a>) {
+    fn solve<'a>(&mut self, input: &SolverInput<'a>) {
         let monomer_id = self.point.monomer_id();
 
         let monomer = input.monomers[monomer_id];

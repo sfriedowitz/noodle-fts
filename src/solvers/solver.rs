@@ -15,7 +15,7 @@ pub trait SolverOps {
 
     fn state(&self) -> &SolverState;
 
-    fn update_state<'a>(&mut self, input: &SolverInput<'a>);
+    fn solve<'a>(&mut self, input: &SolverInput<'a>);
 }
 
 #[enum_dispatch(SolverOps)]

@@ -1,76 +1,69 @@
-use std::{ops::Mul, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
-use ndarray::Zip;
-use num::complex::Complex64;
-
-use super::{propagator::PropagatorDirection, step::PropagatorStep, BlockPropagator};
+use super::{Propagator, PropagatorDirection, PropagatorStep};
 use crate::{
     chem::{Block, Monomer},
-    domain::{Mesh, FFT},
-    fields::{CField, Field, RField},
+    domain::Mesh,
+    error::Result,
+    fields::RField,
 };
 
 #[derive(Debug)]
 pub struct BlockSolver {
     block: Block,
     step: PropagatorStep,
-    forward: Rc<BlockPropagator>,
-    reverse: Rc<BlockPropagator>,
+    forward: Rc<RefCell<Propagator>>,
+    reverse: Rc<RefCell<Propagator>>,
     density: RField,
     step_size: f64,
 }
 
 impl BlockSolver {
-    pub fn new(block: Block, mesh: Mesh, ngrid: usize, step_size: f64) -> Self {
+    pub fn new(block: Block, mesh: Mesh, ngrid: usize, step_size: f64) -> Result<Self> {
         let step = PropagatorStep::new(mesh);
-        let forward = Rc::new(BlockPropagator::new(mesh, ngrid));
-        let reverse = Rc::new(BlockPropagator::new(mesh, ngrid));
+        let forward = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)?));
+        let reverse = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)?));
         let density = RField::zeros(mesh);
-        Self {
+        Ok(Self {
             block,
             step,
             forward,
             reverse,
             density,
             step_size,
+        })
+    }
+
+    pub fn link_predecessor(&mut self, predecessor: &mut Self) {
+        // Predecessor's forward is the source of our forward
+        self.forward
+            .borrow_mut()
+            .set_source(predecessor.forward.clone());
+        // Our reverse is the source of predecessor's reverse
+        predecessor
+            .reverse
+            .borrow_mut()
+            .set_source(self.reverse.clone());
+    }
+
+    pub fn update_step(&mut self, monomers: &[Monomer], fields: &[RField], ksq: &RField) {
+        let monomer_id = self.block.monomer_id;
+        let monomer_size = monomers[monomer_id].size;
+        let field = &fields[monomer_id];
+
+        self.step.update(
+            field,
+            ksq,
+            self.step_size,
+            monomer_size,
+            self.block.segment_length,
+        )
+    }
+
+    pub fn propagate(&mut self, direction: PropagatorDirection) {
+        match direction {
+            PropagatorDirection::Forward => self.forward.borrow_mut().solve(&mut self.step),
+            PropagatorDirection::Reverse => self.reverse.borrow_mut().solve(&mut self.step),
         }
-    }
-
-    pub fn set_source(&mut self, source: &Self) {
-        todo!()
-    }
-
-    pub fn update_operators(&mut self, monomers: &[Monomer], fields: &[RField], ksq: &RField) {
-        let monomer = &monomers[self.block.monomer_id];
-        let field = &fields[self.block.monomer_id];
-        let lw_coeff = self.step_size / 2.0;
-        let lk_coeff = self.step_size * self.block.segment_length.powf(2.0) / 6.0;
-
-        // Update w-operators:
-        // Full = exp(-w * ds / 2)
-        // Half = exp(-w * (ds / 2) / 2)
-        Zip::from(&mut self.step.lw_full)
-            .and(&mut self.step.lw_half)
-            .and(field)
-            .for_each(|full, half, w| {
-                *full = (-lw_coeff * monomer.size * w).exp();
-                *half = (-lw_coeff * monomer.size * w / 2.0).exp();
-            });
-
-        // Update k-operators:
-        // Full = exp(-k^2 * b^2 * ds / 6)
-        // Half = exp(-k^2 * b^2 * (ds / 2) / 6)
-        Zip::from(&mut self.step.lk_full)
-            .and(&mut self.step.lk_half)
-            .and(ksq)
-            .for_each(|full, half, ksq| {
-                let ksq_complex: Complex64 = ksq.into();
-                *full = (-lk_coeff * ksq_complex).exp();
-                *half = (-lk_coeff * ksq_complex / 2.0).exp();
-            });
-    }
-
-    pub fn solve(&mut self, direction: PropagatorDirection) {
-        todo!()
     }
 }

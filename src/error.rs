@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+pub type Result<T> = ::std::result::Result<T, Error>;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("linear algebra error")]
@@ -13,5 +15,3 @@ pub enum Error {
     #[error("generic error: {0}")]
     GenericError(String),
 }
-
-pub type Result<T> = core::result::Result<T, Error>;
