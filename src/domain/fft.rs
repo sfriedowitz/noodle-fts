@@ -7,6 +7,7 @@ use crate::fields::{CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
+#[derive(Clone)]
 pub struct FFT {
     // 1 real, ndim-1 complex handlers
     r2c_handler: R2cFftHandler<f64>,

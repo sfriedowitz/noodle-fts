@@ -1,5 +1,3 @@
-use std::ops::{Mul, MulAssign};
-
 use ndarray::Zip;
 
 use crate::fields::Field;
@@ -8,26 +6,6 @@ pub const PI: f64 = std::f64::consts::PI;
 pub const HALF_PI: f64 = PI / 2.0;
 pub const THIRD_PI: f64 = PI / 3.0;
 pub const TWO_PI: f64 = 2.0 * PI;
-
-pub fn apply_operator<A>(operator: &Field<A>, input: &Field<A>, output: &mut Field<A>)
-where
-    A: Clone + Mul<A, Output = A>,
-{
-    Zip::from(output)
-        .and(input)
-        .and(operator)
-        .for_each(|output, input, op| *output = op.clone() * input.clone())
-}
-
-pub fn apply_operator_inplace<A, B>(operator: &Field<A>, output: &mut Field<B>)
-where
-    A: Clone,
-    B: MulAssign<A>,
-{
-    Zip::from(output)
-        .and(operator)
-        .for_each(|output, op| *output *= op.clone())
-}
 
 pub fn fftshift_index(idx: usize, n: usize) -> f64 {
     if idx <= n / 2 - 1 {

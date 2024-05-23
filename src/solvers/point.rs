@@ -13,7 +13,7 @@ pub struct PointSolver {
 
 impl PointSolver {
     pub fn new(point: Point, mesh: Mesh) -> Self {
-        let state = SolverState::new(mesh, &[point.monomer_id()]);
+        let state = SolverState::new(mesh, [point.monomer_id()]);
         Self { point, state }
     }
 }

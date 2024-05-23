@@ -33,11 +33,11 @@ pub struct SolverState {
 }
 
 impl SolverState {
-    pub fn new(mesh: Mesh, monomer_ids: &[usize]) -> Self {
-        let mut density = HashMap::new();
-        for id in monomer_ids {
-            density.insert(*id, RField::zeros(mesh));
-        }
+    pub fn new(mesh: Mesh, monomer_ids: impl IntoIterator<Item = usize>) -> Self {
+        let density = monomer_ids
+            .into_iter()
+            .map(|id| (id, RField::zeros(mesh)))
+            .collect();
         Self {
             partition: 0.0,
             density,
