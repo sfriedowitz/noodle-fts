@@ -1,49 +1,67 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    borrow::Borrow,
+    cell::{Ref, RefCell},
+    rc::Rc,
+};
+
+use ndarray::Zip;
 
 use super::{Propagator, PropagatorDirection, PropagatorStep};
 use crate::{
     chem::{Block, Monomer},
     domain::Mesh,
-    error::Result,
     fields::RField,
+    math::simpsons_product,
 };
 
 #[derive(Debug)]
 pub struct BlockSolver {
-    block: Block,
+    pub block: Block,
     step: PropagatorStep,
+    step_size: f64,
     forward: Rc<RefCell<Propagator>>,
     reverse: Rc<RefCell<Propagator>>,
-    density: RField,
-    step_size: f64,
 }
 
 impl BlockSolver {
-    pub fn new(block: Block, mesh: Mesh, ngrid: usize, step_size: f64) -> Result<Self> {
+    pub fn new(block: Block, mesh: Mesh, ngrid: usize, step_size: f64) -> Self {
         let step = PropagatorStep::new(mesh);
-        let forward = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)?));
-        let reverse = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)?));
-        let density = RField::zeros(mesh);
-        Ok(Self {
+        let forward = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)));
+        let reverse = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)));
+        Self {
             block,
             step,
+            step_size,
             forward,
             reverse,
-            density,
-            step_size,
-        })
+        }
+    }
+
+    pub fn forward_propagator(&self) -> Ref<Propagator> {
+        (*self.forward).borrow()
+    }
+
+    pub fn reverse_propagator(&self) -> Ref<Propagator> {
+        (*self.reverse).borrow()
     }
 
     pub fn link_predecessor(&mut self, predecessor: &mut Self) {
-        // Predecessor's forward is the source of our forward
+        // Predecessor's forward is the source of this forward
         self.forward
             .borrow_mut()
-            .set_source(predecessor.forward.clone());
-        // Our reverse is the source of predecessor's reverse
+            .add_source(predecessor.forward.clone());
+        // This reverse is the source of predecessor's reverse
         predecessor
             .reverse
             .borrow_mut()
-            .set_source(self.reverse.clone());
+            .add_source(self.reverse.clone());
+    }
+
+    pub fn propagate(&mut self, direction: PropagatorDirection) {
+        match direction {
+            PropagatorDirection::Forward => self.forward.borrow_mut().propagate(&mut self.step),
+            PropagatorDirection::Reverse => self.reverse.borrow_mut().propagate(&mut self.step),
+        }
     }
 
     pub fn update_step(&mut self, monomers: &[Monomer], fields: &[RField], ksq: &RField) {
@@ -60,10 +78,16 @@ impl BlockSolver {
         )
     }
 
-    pub fn propagate(&mut self, direction: PropagatorDirection) {
-        match direction {
-            PropagatorDirection::Forward => self.forward.borrow_mut().solve(&mut self.step),
-            PropagatorDirection::Reverse => self.reverse.borrow_mut().solve(&mut self.step),
-        }
+    pub fn density(&self, prefactor: f64) -> RField {
+        let qf = self.forward_propagator();
+        let qf = qf.qfields();
+
+        let qr = self.reverse_propagator();
+        let qr = qr.qfields();
+
+        let mut density = simpsons_product(&qf, &qf, Some(self.step_size));
+        density *= prefactor;
+
+        density
     }
 }

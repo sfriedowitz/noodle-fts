@@ -8,4 +8,4 @@ pub use block::BlockSolver;
 pub use point::PointSolver;
 pub use polymer::PolymerSolver;
 pub use propagator::{Propagator, PropagatorDirection, PropagatorStep};
-pub use solver::{SolverInput, SolverState};
+pub use solver::{SolverOps, SolverState};

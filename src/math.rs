@@ -1,6 +1,6 @@
 use ndarray::Zip;
 
-use crate::fields::Field;
+use crate::fields::{Field, RField};
 
 pub const PI: f64 = std::f64::consts::PI;
 pub const HALF_PI: f64 = PI / 2.0;
@@ -25,6 +25,46 @@ pub fn rfftfreq(n: usize, d: Option<f64>) -> impl Iterator<Item = f64> + Clone {
     let d = d.unwrap_or(1.0);
     let norm = d * n as f64;
     (0..n / 2 + 1).map(move |i| i as f64 / norm)
+}
+
+pub fn simpsons_product(xfields: &[RField], yfields: &[RField], dx: Option<f64>) -> RField {
+    let nf = xfields.len();
+    assert!(yfields.len() == nf);
+    let dx = dx.unwrap_or(1.0);
+
+    // Reset
+    let mut output = RField::zeros(xfields[0].shape());
+
+    // Endpoint contributions
+    Zip::from(&mut output)
+        .and(&xfields[0])
+        .and(&yfields[nf - 1])
+        .for_each(|out, x, y| *out += x * y);
+    Zip::from(&mut output)
+        .and(&xfields[nf - 1])
+        .and(&yfields[0])
+        .for_each(|out, x, y| *out += x * y);
+
+    // Odd indices
+    for i in (1..nf - 1).step_by(2) {
+        Zip::from(&mut output)
+            .and(&xfields[i])
+            .and(&yfields[nf - i - 1])
+            .for_each(|out, x, y| *out += x * y);
+    }
+
+    // Even indices
+    for i in (2..nf - 2).step_by(2) {
+        Zip::from(&mut output)
+            .and(&xfields[i])
+            .and(&yfields[nf - i - 1])
+            .for_each(|out, x, y| *out += x * y);
+    }
+
+    // Normalize the integral
+    output *= dx / 3.0;
+
+    output
 }
 
 #[cfg(test)]

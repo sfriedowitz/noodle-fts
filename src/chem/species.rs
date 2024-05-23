@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use enum_dispatch::enum_dispatch;
 
 use super::{block::Block, monomer::Monomer};
-use crate::error::{Error, Result};
 
 #[enum_dispatch]
 pub trait SpeciesDescription {
@@ -29,8 +28,8 @@ pub enum Species {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
-    monomer_id: usize,
-    fraction: f64,
+    pub monomer_id: usize,
+    pub fraction: f64,
 }
 
 impl Point {
@@ -39,10 +38,6 @@ impl Point {
             monomer_id,
             fraction,
         }
-    }
-
-    pub fn monomer_id(&self) -> usize {
-        self.monomer_id
     }
 }
 
@@ -70,32 +65,22 @@ impl SpeciesDescription for Point {
 
 #[derive(Debug, Clone)]
 pub struct Polymer {
-    blocks: Vec<Block>,
-    contour_steps: usize,
-    fraction: f64,
+    pub blocks: Vec<Block>,
+    pub contour_steps: usize,
+    pub fraction: f64,
 }
 
 impl Polymer {
-    pub fn new(blocks: Vec<Block>, contour_steps: usize, fraction: f64) -> Result<Self> {
-        if blocks.is_empty() {
-            return Err(Error::ValidationError(
-                "Polymer must contain at least one block".into(),
-            ));
-        }
-        Ok(Self {
+    pub fn new(blocks: Vec<Block>, contour_steps: usize, fraction: f64) -> Self {
+        Self {
             blocks,
             contour_steps,
             fraction,
-        })
+        }
     }
 
     pub fn nblock(&self) -> usize {
         return self.blocks.len();
-    }
-
-    pub fn with_block(mut self, block: Block) -> Self {
-        self.blocks.push(block);
-        self
     }
 }
 
@@ -149,9 +134,7 @@ mod tests {
         let block_a = Block::new(monomer_a.id, 100, 1.0);
         let block_b = Block::new(monomer_b.id, 100, 1.0);
 
-        let species: Species = Polymer::new(vec![block_a, block_b], 100, 1.0)
-            .unwrap()
-            .into();
+        let species: Species = Polymer::new(vec![block_a, block_b], 100, 1.0).into();
 
         assert!(species.monomer_fraction(monomer_a.id) == 0.5);
         assert!(species.monomer_fraction(monomer_b.id) == 0.5);

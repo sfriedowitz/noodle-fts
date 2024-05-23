@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use ndarray::Zip;
 
-use super::{solver::SolverOps, SolverInput, SolverState};
+use super::{SolverOps, SolverState};
 use crate::{
-    chem::{Point, Species, SpeciesDescription},
-    domain::Mesh,
+    chem::{Monomer, Point, Species, SpeciesDescription},
+    domain::{Domain, Mesh},
     fields::RField,
 };
 
@@ -17,7 +17,8 @@ pub struct PointSolver {
 
 impl PointSolver {
     pub fn new(point: Point, mesh: Mesh) -> Self {
-        let state = SolverState::new(mesh, point.monomer_ids());
+        let mut state = SolverState::default();
+        state.density.insert(point.monomer_id, RField::zeros(mesh));
         Self { point, state }
     }
 }
@@ -31,26 +32,26 @@ impl SolverOps for PointSolver {
         &self.state
     }
 
-    fn solve<'a>(&mut self, input: &SolverInput<'a>) {
-        let monomer_id = self.point.monomer_id();
-
-        let monomer = input.monomers[monomer_id];
-        let field = &input.fields[monomer_id];
+    fn solve<'a>(&mut self, domain: &Domain, fields: &[RField], monomers: &[Monomer]) {
+        let monomer_id = self.point.monomer_id;
+        let monomer = monomers[monomer_id];
+        let field = &fields[monomer_id];
         let mut density = self.state.density.get_mut(&monomer_id).unwrap();
 
         // Compute density field and partition function from omega field
-        self.state.partition = 0.0;
+        let mut partition_sum = 0.0;
         Zip::from(density.view_mut())
             .and(field)
             .for_each(|rho, omega| {
                 *rho = (-monomer.size * omega).exp();
-                self.state.partition += *rho;
+                partition_sum += *rho;
             });
 
         // Normalize partition sum
-        self.state.partition /= field.len() as f64;
+        self.state.partition = partition_sum / domain.mesh_size() as f64;
 
         // Normalize density inplace
-        density.mapv_inplace(|rho| rho / self.state.partition);
+        let prefactor = self.point.fraction / self.state.partition;
+        density.mapv_inplace(|rho| prefactor * rho);
     }
 }

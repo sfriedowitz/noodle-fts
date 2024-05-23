@@ -5,9 +5,15 @@ use enum_dispatch::enum_dispatch;
 use super::{PointSolver, PolymerSolver};
 use crate::{
     chem::{Monomer, Species},
-    domain::Mesh,
+    domain::{Domain, Mesh},
     fields::RField,
 };
+
+#[derive(Debug, Default)]
+pub struct SolverState {
+    pub partition: f64,
+    pub density: HashMap<usize, RField>,
+}
 
 #[enum_dispatch]
 pub trait SolverOps {
@@ -15,7 +21,7 @@ pub trait SolverOps {
 
     fn state(&self) -> &SolverState;
 
-    fn solve<'a>(&mut self, input: &SolverInput<'a>);
+    fn solve<'a>(&mut self, domain: &Domain, fields: &[RField], monomers: &[Monomer]);
 }
 
 #[enum_dispatch(SolverOps)]
@@ -23,31 +29,4 @@ pub trait SolverOps {
 pub enum SpeciesSolver {
     PointSolver,
     PolymerSolver,
-}
-
-#[derive(Debug)]
-pub struct SolverInput<'a> {
-    pub monomers: &'a [Monomer],
-    pub fields: &'a [RField],
-    pub ksq: &'a RField,
-}
-
-#[derive(Debug)]
-pub struct SolverState {
-    pub partition: f64,
-    pub density: HashMap<usize, RField>,
-}
-
-impl SolverState {
-    pub fn new(mesh: Mesh, monomer_ids: HashSet<usize>) -> Self {
-        let density = monomer_ids
-            .into_iter()
-            .map(|id| (id, RField::zeros(mesh)))
-            .collect();
-
-        Self {
-            partition: 0.0,
-            density,
-        }
-    }
 }

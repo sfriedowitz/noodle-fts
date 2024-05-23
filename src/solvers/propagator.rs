@@ -5,7 +5,6 @@ use num::complex::Complex64;
 
 use crate::{
     domain::{Mesh, FFT},
-    error::{Error, Result},
     fields::{CField, Field, RField},
 };
 
@@ -65,8 +64,8 @@ impl PropagatorStep {
         let lk_coeff = step_size * segment_length.powf(2.0) / 6.0;
 
         // Update w-operators:
-        // Full = exp(-w * ds / 2)
-        // Half = exp(-w * (ds / 2) / 2)
+        // Full = exp(-w * size * ds / 2)
+        // Half = exp(-w * size * (ds / 2) / 2)
         Zip::from(&mut self.lw_full)
             .and(&mut self.lw_half)
             .and(field)
@@ -176,18 +175,11 @@ pub struct Propagator {
 }
 
 impl Propagator {
-    pub fn new(mesh: Mesh, ngrid: usize) -> Result<Self> {
-        (ngrid > 0)
-            .then_some({
-                let qfields = (0..ngrid).map(|_| RField::zeros(mesh)).collect();
-                Self {
-                    qfields,
-                    source: None,
-                }
-            })
-            .ok_or(Error::ValidationError(
-                "propagator cannot contain zero grid points".into(),
-            ))
+    pub fn new(mesh: Mesh, ngrid: usize) -> Self {
+        Self {
+            qfields: (0..ngrid).map(|_| RField::zeros(mesh)).collect(),
+            source: None,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -198,34 +190,30 @@ impl Propagator {
         &self.qfields
     }
 
-    pub fn qfields_mut(&mut self) -> &mut [RField] {
-        &mut self.qfields
-    }
-
-    pub fn head(&self) -> &RField {
+    pub fn first(&self) -> &RField {
         &self.qfields[0]
     }
 
-    pub fn tail(&self) -> &RField {
-        &self.qfields[self.qfields.len() - 1]
+    pub fn last(&self) -> &RField {
+        &self.qfields[self.len() - 1]
     }
 
-    pub fn set_source(&mut self, source: Rc<RefCell<Propagator>>) {
+    pub fn add_source(&mut self, source: Rc<RefCell<Propagator>>) {
         self.source = Some(source)
     }
 
-    pub fn solve(&mut self, step: &mut PropagatorStep) {
+    pub fn propagate(&mut self, step: &mut PropagatorStep) {
         // Initial condition depending on whether a source is present
         if let Some(source) = &self.source {
-            self.qfields[0].assign(source.borrow().tail())
+            self.qfields[0].assign(source.borrow().last())
         } else {
             self.qfields[0].fill(1.0)
         }
         // Propagate from 1..len()
         for s in 1..self.len() {
-            let (first, last) = self.qfields.split_at_mut(s);
-            let q_in = &first[first.len() - 1];
-            let q_out = &mut last[0];
+            let (head, tail) = self.qfields.split_at_mut(s);
+            let q_in = head.last().unwrap();
+            let q_out = tail.first_mut().unwrap();
             step.apply(q_in, q_out, StepMethod::RQM4)
         }
     }
@@ -246,22 +234,22 @@ mod tests {
 
     #[test]
     fn test_propagator() {
-        let mesh = Mesh::One(16);
+        let mesh = Mesh::One(128);
         let cell = UnitCell::lamellar(10.0).unwrap();
         let domain = Domain::new(mesh, cell).unwrap();
 
         let field = RField::random(mesh, Normal::new(0.0, 0.1).unwrap());
         let ksq = domain.ksq().unwrap();
 
-        let mut propagator = Propagator::new(mesh, 1).unwrap();
+        let mut propagator = Propagator::new(mesh, 100);
         let mut step = PropagatorStep::new(mesh);
         step.update(&field, &ksq, 0.01, 1.0, 1.0);
 
         let now = Instant::now();
-        propagator.solve(&mut step);
+        propagator.propagate(&mut step);
         let elapsed = now.elapsed();
 
-        dbg!(propagator);
+        // dbg!(propagator);
         dbg!(elapsed);
     }
 }
