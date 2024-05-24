@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Mul, ptr::NonNull, rc::Rc};
+use std::ops::Mul;
 
 use ndarray::Zip;
 use num::complex::Complex64;
@@ -9,13 +9,13 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum StepMethod {
+pub enum StepMethod {
     RK2,
     RQM4,
 }
 
 #[derive(Debug)]
-pub(super) struct PropagatorStep {
+pub struct PropagatorStep {
     fft: FFT,
     // Operator arrays
     lw_full: RField,
@@ -50,12 +50,12 @@ impl PropagatorStep {
         &mut self,
         field: &RField,
         ksq: &RField,
-        step_size: f64,
         monomer_size: f64,
         segment_length: f64,
+        ds: f64,
     ) {
-        let lw_coeff = step_size / 2.0;
-        let lk_coeff = step_size * segment_length.powf(2.0) / 6.0;
+        let lw_coeff = ds / 2.0;
+        let lk_coeff = ds * segment_length.powf(2.0) / 6.0;
 
         // Update w-operators:
         // Full = exp(-w * size * ds / 2)
@@ -159,101 +159,5 @@ impl PropagatorStep {
             .and(input)
             .and(output)
             .for_each(|operator, input, output| *output = operator * input)
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct Propagator {
-    q_fields: Vec<RField>,
-    sources: Vec<NonNull<Propagator>>,
-}
-
-impl Propagator {
-    pub fn new(mesh: Mesh, ns: usize) -> Self {
-        let q_fields = (0..ns).map(|_| RField::zeros(mesh)).collect();
-        Self {
-            q_fields,
-            sources: Vec::new(),
-        }
-    }
-
-    pub fn ns(&self) -> usize {
-        self.q_fields.len()
-    }
-
-    pub fn q_fields(&self) -> &[RField] {
-        &self.q_fields
-    }
-
-    pub fn head(&self) -> &RField {
-        &self.q_fields[0]
-    }
-
-    pub fn tail(&self) -> &RField {
-        &self.q_fields[self.ns() - 1]
-    }
-
-    pub fn add_source(&mut self, source: &mut Propagator) {
-        let source_ptr = NonNull::new(source).unwrap();
-        self.sources.push(source_ptr)
-    }
-
-    pub fn propagate(&mut self, step: &mut PropagatorStep) {
-        // Apply initial condition
-        self.update_head();
-
-        // Propagate from 1..ns
-        for s in 1..self.ns() {
-            let (left, right) = self.q_fields.split_at_mut(s);
-            let q_in = left.last().unwrap();
-            let q_out = right.first_mut().unwrap();
-            step.apply(q_in, q_out, StepMethod::RQM4)
-        }
-    }
-
-    fn update_head(&mut self) {
-        // Head begins with 1.0 in all elements
-        // Each source is applied multiplicatively to the initial condition
-        let mut head = &mut self.q_fields[0];
-        head.fill(1.0);
-
-        for source in self.sources.iter() {
-            // SAFETY: IDK probably not
-            *head *= unsafe { source.as_ref() }.tail();
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Instant;
-
-    use ndarray_rand::{rand_distr::Normal, RandomExt};
-
-    use crate::{
-        domain::{Domain, Mesh, UnitCell},
-        fields::RField,
-        solvers::propagator::{Propagator, PropagatorStep},
-    };
-
-    #[test]
-    fn test_propagator() {
-        let mesh = Mesh::One(128);
-        let cell = UnitCell::lamellar(10.0).unwrap();
-        let domain = Domain::new(mesh, cell).unwrap();
-
-        let field = RField::random(mesh, Normal::new(0.0, 0.1).unwrap());
-        let ksq = domain.ksq().unwrap();
-
-        let mut propagator = Propagator::new(mesh, 100);
-        let mut step = PropagatorStep::new(mesh);
-        step.update(&field, &ksq, 0.01, 1.0, 1.0);
-
-        let now = Instant::now();
-        propagator.propagate(&mut step);
-        let elapsed = now.elapsed();
-
-        // dbg!(propagator);
-        dbg!(elapsed);
     }
 }

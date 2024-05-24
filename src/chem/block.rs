@@ -15,4 +15,8 @@ impl Block {
             segment_length,
         }
     }
+
+    pub fn size(&self) -> f64 {
+        self.monomer.size * (self.repeat_units as f64)
+    }
 }

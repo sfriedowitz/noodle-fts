@@ -32,11 +32,10 @@ impl SolverOps for PointSolver {
         &self.state
     }
 
-    fn solve<'a>(&mut self, domain: &Domain, fields: &[RField], monomers: &[Monomer]) {
-        let monomer_id = self.point.monomer.id;
-        let monomer = monomers[monomer_id];
-        let field = &fields[monomer_id];
-        let mut density = self.state.density.get_mut(&monomer_id).unwrap();
+    fn solve<'a>(&mut self, domain: &Domain, fields: &[RField]) {
+        let monomer = self.point.monomer;
+        let field = &fields[monomer.id];
+        let mut density = self.state.density.get_mut(&monomer.id).unwrap();
 
         // Compute density field and partition function from omega field
         let mut partition_sum = 0.0;

@@ -4,7 +4,7 @@ use enum_dispatch::enum_dispatch;
 
 use super::{PointSolver, PolymerSolver};
 use crate::{
-    chem::{Monomer, Species},
+    chem::Species,
     domain::{Domain, Mesh},
     fields::RField,
 };
@@ -21,7 +21,7 @@ pub trait SolverOps {
 
     fn state(&self) -> &SolverState;
 
-    fn solve<'a>(&mut self, domain: &Domain, fields: &[RField], monomers: &[Monomer]);
+    fn solve<'a>(&mut self, domain: &Domain, fields: &[RField]);
 }
 
 #[enum_dispatch(SolverOps)]
