@@ -1,18 +1,19 @@
 use std::collections::HashSet;
 
 use enum_dispatch::enum_dispatch;
+use itertools::Itertools;
 
 use super::{block::Block, monomer::Monomer};
 
 #[enum_dispatch]
 pub trait SpeciesDescription {
+    fn size(&self) -> f64;
+
     fn fraction(&self) -> f64;
 
-    fn monomer_ids(&self) -> HashSet<usize>;
+    fn monomers(&self) -> Vec<Monomer>;
 
     fn monomer_fraction(&self, id: usize) -> f64;
-
-    fn size(&self, monomers: &[Monomer]) -> f64;
 }
 
 /// Enumeration of molecular species types.
@@ -28,38 +29,35 @@ pub enum Species {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
-    pub monomer_id: usize,
+    pub monomer: Monomer,
     pub fraction: f64,
 }
 
 impl Point {
-    pub fn new(monomer_id: usize, fraction: f64) -> Self {
-        Self {
-            monomer_id,
-            fraction,
-        }
+    pub fn new(monomer: Monomer, fraction: f64) -> Self {
+        Self { monomer, fraction }
     }
 }
 
 impl SpeciesDescription for Point {
+    fn size(&self) -> f64 {
+        self.monomer.size
+    }
+
     fn fraction(&self) -> f64 {
         self.fraction
     }
 
-    fn monomer_ids(&self) -> HashSet<usize> {
-        HashSet::from([self.monomer_id])
+    fn monomers(&self) -> Vec<Monomer> {
+        Vec::from([self.monomer])
     }
 
     fn monomer_fraction(&self, id: usize) -> f64 {
-        if id == self.monomer_id {
+        if id == self.monomer.id {
             1.0
         } else {
             0.0
         }
-    }
-
-    fn size(&self, monomers: &[Monomer]) -> f64 {
-        monomers[self.monomer_id].size
     }
 }
 
@@ -85,28 +83,32 @@ impl Polymer {
 }
 
 impl SpeciesDescription for Polymer {
+    fn size(&self) -> f64 {
+        self.blocks
+            .iter()
+            .map(|b| b.monomer.size * (b.repeat_units as f64))
+            .sum()
+    }
+
     fn fraction(&self) -> f64 {
         self.fraction
     }
 
-    fn monomer_ids(&self) -> HashSet<usize> {
-        self.blocks.iter().map(|b| b.monomer_id).collect()
+    fn monomers(&self) -> Vec<Monomer> {
+        self.blocks
+            .iter()
+            .map(|b| b.monomer)
+            .unique_by(|monomer| monomer.id)
+            .collect()
     }
 
     fn monomer_fraction(&self, id: usize) -> f64 {
         let total: f64 = self
             .blocks
             .iter()
-            .map(|b| if b.monomer_id == id { 1.0 } else { 0.0 })
+            .map(|b| if b.monomer.id == id { 1.0 } else { 0.0 })
             .sum();
         total / self.nblock() as f64
-    }
-
-    fn size(&self, monomers: &[Monomer]) -> f64 {
-        self.blocks
-            .iter()
-            .map(|b| monomers[b.monomer_id].size * (b.repeat_units as f64))
-            .sum()
     }
 }
 
@@ -118,12 +120,12 @@ mod tests {
     #[test]
     fn test_point_species() {
         let monomer = Monomer::new(0, 1.0);
-        let species: Species = Point::new(monomer.id, 1.0).into();
+        let species: Species = Point::new(monomer, 1.0).into();
 
         assert!(species.monomer_fraction(monomer.id) == 1.0);
         assert!(species.monomer_fraction(1) == 0.0);
 
-        assert!(species.size(&[monomer]) == monomer.size);
+        assert!(species.size() == monomer.size);
     }
 
     #[test]
@@ -131,14 +133,14 @@ mod tests {
         let monomer_a = Monomer::new(0, 1.0);
         let monomer_b = Monomer::new(1, 1.0);
 
-        let block_a = Block::new(monomer_a.id, 100, 1.0);
-        let block_b = Block::new(monomer_b.id, 100, 1.0);
+        let block_a = Block::new(monomer_a, 100, 1.0);
+        let block_b = Block::new(monomer_b, 100, 1.0);
 
         let species: Species = Polymer::new(vec![block_a, block_b], 100, 1.0).into();
 
         assert!(species.monomer_fraction(monomer_a.id) == 0.5);
         assert!(species.monomer_fraction(monomer_b.id) == 0.5);
 
-        assert!(species.size(&[monomer_a, monomer_b]) == 200.0);
+        assert!(species.size() == 200.0);
     }
 }

@@ -163,7 +163,7 @@ impl PropagatorStep {
 }
 
 #[derive(Debug)]
-pub struct Propagator {
+pub(super) struct Propagator {
     qfields: Vec<RField>,
     sources: Vec<NonNull<Propagator>>,
 }
@@ -181,7 +181,7 @@ impl Propagator {
         self.qfields.len()
     }
 
-    pub fn qfields(&self) -> &[RField] {
+    pub fn q_fields(&self) -> &[RField] {
         &self.qfields
     }
 

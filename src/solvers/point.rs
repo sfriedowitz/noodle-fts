@@ -18,7 +18,7 @@ pub struct PointSolver {
 impl PointSolver {
     pub fn new(point: Point, mesh: Mesh) -> Self {
         let mut state = SolverState::default();
-        state.density.insert(point.monomer_id, RField::zeros(mesh));
+        state.density.insert(point.monomer.id, RField::zeros(mesh));
         Self { point, state }
     }
 }
@@ -33,7 +33,7 @@ impl SolverOps for PointSolver {
     }
 
     fn solve<'a>(&mut self, domain: &Domain, fields: &[RField], monomers: &[Monomer]) {
-        let monomer_id = self.point.monomer_id;
+        let monomer_id = self.point.monomer.id;
         let monomer = monomers[monomer_id];
         let field = &fields[monomer_id];
         let mut density = self.state.density.get_mut(&monomer_id).unwrap();

@@ -18,10 +18,20 @@ pub struct PolymerSolver {
 impl PolymerSolver {
     pub fn new(polymer: Polymer, mesh: Mesh) -> Self {
         let mut state = SolverState::default();
-        for monomer_id in polymer.monomer_ids() {
-            state.density.insert(monomer_id, RField::zeros(mesh));
+        for monomer in polymer.monomers() {
+            state.density.insert(monomer.id, RField::zeros(mesh));
         }
 
+        let block_solvers = Self::build_block_solvers(&polymer, mesh);
+
+        Self {
+            polymer,
+            state,
+            block_solvers,
+        }
+    }
+
+    fn build_block_solvers(polymer: &Polymer, mesh: Mesh) -> Vec<BlockSolver> {
         // Create block solvers and link consecutive pairs
         let mut block_solvers: Vec<BlockSolver> = polymer
             .blocks
@@ -37,11 +47,7 @@ impl PolymerSolver {
             successor.add_source(predecessor);
         }
 
-        Self {
-            polymer,
-            state,
-            block_solvers,
-        }
+        block_solvers
     }
 }
 
@@ -74,7 +80,7 @@ impl SolverOps for PolymerSolver {
         self.state.partition = partition_sum / domain.mesh_size() as f64;
 
         // Update solver density
-        let prefactor = self.polymer.fraction / self.polymer.size(&monomers) / self.state.partition;
+        let prefactor = self.polymer.fraction / self.polymer.size() / self.state.partition;
         for solver in self.block_solvers.iter_mut() {
             solver.update_density(prefactor);
         }
@@ -83,7 +89,7 @@ impl SolverOps for PolymerSolver {
         for (id, rho) in self.state.density.iter_mut() {
             rho.fill(0.0);
             for solver in self.block_solvers.iter() {
-                if solver.block.monomer_id == *id {
+                if solver.block.monomer.id == *id {
                     *rho += solver.density();
                 }
             }
@@ -112,7 +118,7 @@ mod tests {
         let fields = vec![RField::random(mesh, Normal::new(0.0, 0.1).unwrap())];
 
         let monomer = Monomer::new(0, 1.0);
-        let block = Block::new(monomer.id, 100, 1.0);
+        let block = Block::new(monomer, 100, 1.0);
         let polymer = Polymer::new(vec![block], 100, 1.0);
 
         let mut solver = PolymerSolver::new(polymer, mesh);

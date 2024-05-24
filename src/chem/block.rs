@@ -1,14 +1,16 @@
+use super::Monomer;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Block {
-    pub monomer_id: usize,
+    pub monomer: Monomer,
     pub repeat_units: usize,
     pub segment_length: f64,
 }
 
 impl Block {
-    pub fn new(monomer_id: usize, repeat_units: usize, segment_length: f64) -> Self {
+    pub fn new(monomer: Monomer, repeat_units: usize, segment_length: f64) -> Self {
         Self {
-            monomer_id,
+            monomer,
             repeat_units,
             segment_length,
         }

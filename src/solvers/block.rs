@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub enum PropagatorDirection {
+pub(super) enum PropagatorDirection {
     Forward,
     Reverse,
 }
@@ -74,7 +74,7 @@ impl BlockSolver {
     }
 
     pub fn update_step(&mut self, monomers: &[Monomer], fields: &[RField], ksq: &RField) {
-        let monomer_id = self.block.monomer_id;
+        let monomer_id = self.block.monomer.id;
         let monomer_size = monomers[monomer_id].size;
         let field = &fields[monomer_id];
 
@@ -83,13 +83,13 @@ impl BlockSolver {
     }
 
     pub fn update_density(&mut self, prefactor: f64) {
-        let qf = self.forward.qfields();
-        let qr = self.reverse.qfields();
+        let qf = self.forward.q_fields();
+        let qr = self.reverse.q_fields();
 
-        let ns = self.forward_propagator().ns();
+        self.density.fill(0.0);
 
         // Simpson's rule integration of qf * qr
-        self.density.fill(0.0);
+        let ns = self.forward_propagator().ns();
         for s in 0..ns {
             let coef = if s == 0 || s == ns - 1 {
                 // Endpoints
@@ -102,7 +102,7 @@ impl BlockSolver {
                 4.0
             };
             // We integrate at contour position `s` for both forward and reverse
-            // because index 0 into the qr vector is for position Ns on the chain
+            // because index 0 into the qr vector is for position N on the chain
             Zip::from(&mut self.density)
                 .and(&qf[s])
                 .and(&qr[s])
