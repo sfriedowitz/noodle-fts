@@ -1,18 +1,23 @@
 use std::{
     borrow::Borrow,
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     rc::Rc,
 };
 
 use ndarray::Zip;
 
-use super::{Propagator, PropagatorDirection, PropagatorStep};
+use super::{Propagator, PropagatorStep};
 use crate::{
     chem::{Block, Monomer},
     domain::Mesh,
     fields::RField,
-    math::simpsons_product,
 };
+
+#[derive(Debug, Clone, Copy)]
+pub enum PropagatorDirection {
+    Forward,
+    Reverse,
+}
 
 #[derive(Debug)]
 pub struct BlockSolver {
@@ -37,11 +42,11 @@ impl BlockSolver {
         }
     }
 
-    pub fn forward_propagator(&self) -> Ref<Propagator> {
+    pub fn forward_ref(&self) -> Ref<Propagator> {
         (*self.forward).borrow()
     }
 
-    pub fn reverse_propagator(&self) -> Ref<Propagator> {
+    pub fn reverse_ref(&self) -> Ref<Propagator> {
         (*self.reverse).borrow()
     }
 
@@ -58,10 +63,11 @@ impl BlockSolver {
     }
 
     pub fn propagate(&mut self, direction: PropagatorDirection) {
-        match direction {
-            PropagatorDirection::Forward => self.forward.borrow_mut().propagate(&mut self.step),
-            PropagatorDirection::Reverse => self.reverse.borrow_mut().propagate(&mut self.step),
-        }
+        let mut propagator = match direction {
+            PropagatorDirection::Forward => self.forward.borrow_mut(),
+            PropagatorDirection::Reverse => self.reverse.borrow_mut(),
+        };
+        propagator.propagate(&mut self.step);
     }
 
     pub fn update_step(&mut self, monomers: &[Monomer], fields: &[RField], ksq: &RField) {
@@ -78,15 +84,36 @@ impl BlockSolver {
         )
     }
 
-    pub fn density(&self, prefactor: f64) -> RField {
-        let qf = self.forward_propagator();
-        let qf = qf.qfields();
+    pub fn density(&self) -> RField {
+        let forward_propagator = self.forward_ref();
+        let qf = forward_propagator.q_fields();
 
-        let qr = self.reverse_propagator();
-        let qr = qr.qfields();
+        let reverse_propagator = self.reverse_ref();
+        let qr = reverse_propagator.q_fields();
 
-        let mut density = simpsons_product(&qf, &qf, Some(self.step_size));
-        density *= prefactor;
+        let ns = forward_propagator.ns();
+        let mut density = RField::zeros(qf[0].shape());
+
+        // Simpson's rule integration of qf * qr
+        for s in 0..ns {
+            let coef = if s == 0 || s == ns - 1 {
+                // Endpoints
+                1.0
+            } else if s % 2 == 0 {
+                // Even indices
+                2.0
+            } else {
+                // Odd indices
+                4.0
+            };
+            Zip::from(&mut density)
+                .and(&qf[s])
+                .and(&qr[s])
+                .for_each(|out, x, y| *out += coef * x * y);
+        }
+
+        // Normalize the integral
+        density *= self.step_size / 3.0;
 
         density
     }

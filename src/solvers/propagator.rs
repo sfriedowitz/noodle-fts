@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Mul, rc::Rc};
+use std::{cell::RefCell, ops::Mul, ptr::NonNull, rc::Rc};
 
 use ndarray::Zip;
 use num::complex::Complex64;
@@ -12,12 +12,6 @@ use crate::{
 pub enum StepMethod {
     RK2,
     RQM4,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum PropagatorDirection {
-    Forward,
-    Reverse,
 }
 
 #[derive(Debug)]
@@ -110,7 +104,7 @@ impl PropagatorStep {
 
     fn step_full(&mut self, q_in: &RField) {
         // Apply lw_full to q_in, store in work_real
-        Self::apply_operator_into(&self.lw_full, q_in, &mut self.work_real);
+        Self::multiply_operator_into(&self.lw_full, q_in, &mut self.work_real);
 
         // Forward FFT into work_complex
         self.fft.forward(&self.work_real, &mut self.work_complex);
@@ -122,12 +116,12 @@ impl PropagatorStep {
         self.fft.inverse(&self.work_complex, &mut self.work_real);
 
         // Apply lw_full operator to work_real, store in q_full
-        Self::apply_operator_into(&self.lw_full, &self.work_real, &mut self.q_full);
+        Self::multiply_operator_into(&self.lw_full, &self.work_real, &mut self.q_full);
     }
 
     fn step_double_half(&mut self, q_in: &RField) {
         // Apply lw_half to q_in, store in work_real
-        Self::apply_operator_into(&self.lw_half, q_in, &mut self.work_real);
+        Self::multiply_operator_into(&self.lw_half, q_in, &mut self.work_real);
 
         // Forward FFT into work_complex
         self.fft.forward(&self.work_real, &mut self.work_complex);
@@ -151,10 +145,10 @@ impl PropagatorStep {
         self.fft.inverse(&self.work_complex, &mut self.work_real);
 
         // Apply lw_half operator to work_real, store in q_double_half
-        Self::apply_operator_into(&self.lw_half, &self.work_real, &mut self.q_double_half);
+        Self::multiply_operator_into(&self.lw_half, &self.work_real, &mut self.q_double_half);
     }
 
-    fn apply_operator_into<'a, T>(
+    fn multiply_operator_into<'a, T>(
         operator: &'a Field<T>,
         input: &'a Field<T>,
         output: &mut Field<T>,
@@ -169,20 +163,21 @@ impl PropagatorStep {
 }
 
 #[derive(Debug)]
-pub struct Propagator {
+pub(super) struct Propagator {
     qfields: Vec<RField>,
-    source: Option<Rc<RefCell<Propagator>>>,
+    sources: Vec<NonNull<Propagator>>,
 }
 
 impl Propagator {
     pub fn new(mesh: Mesh, ngrid: usize) -> Self {
+        let qfields = (0..ngrid).map(|_| RField::zeros(mesh)).collect();
         Self {
-            qfields: (0..ngrid).map(|_| RField::zeros(mesh)).collect(),
-            source: None,
+            qfields,
+            sources: Vec::new(),
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn ns(&self) -> usize {
         self.qfields.len()
     }
 
@@ -190,31 +185,40 @@ impl Propagator {
         &self.qfields
     }
 
-    pub fn first(&self) -> &RField {
+    pub fn head(&self) -> &RField {
         &self.qfields[0]
     }
 
-    pub fn last(&self) -> &RField {
-        &self.qfields[self.len() - 1]
+    pub fn tail(&self) -> &RField {
+        &self.qfields[self.ns() - 1]
     }
 
-    pub fn add_source(&mut self, source: Rc<RefCell<Propagator>>) {
-        self.source = Some(source)
+    pub fn add_source(&mut self, source: NonNull<Propagator>) {
+        self.sources.push(source)
     }
 
     pub fn propagate(&mut self, step: &mut PropagatorStep) {
-        // Initial condition depending on whether a source is present
-        if let Some(source) = &self.source {
-            self.qfields[0].assign(source.borrow().last())
-        } else {
-            self.qfields[0].fill(1.0)
-        }
-        // Propagate from 1..len()
-        for s in 1..self.len() {
-            let (head, tail) = self.qfields.split_at_mut(s);
-            let q_in = head.last().unwrap();
-            let q_out = tail.first_mut().unwrap();
+        // Apply initial condition
+        self.update_head();
+
+        // Propagate from 1..ns
+        for s in 1..self.ns() {
+            let (left, right) = self.qfields.split_at_mut(s);
+            let q_in = left.last().unwrap();
+            let q_out = right.first_mut().unwrap();
             step.apply(q_in, q_out, StepMethod::RQM4)
+        }
+    }
+
+    fn update_head(&mut self) {
+        // Head begins with 1.0 in all elements
+        // Each source is applied multiplicatively to the initial condition
+        let mut head = &mut self.qfields[0];
+        head.fill(1.0);
+
+        for source in self.sources.iter() {
+            // SAFETY: IDK probably not
+            *head *= unsafe { source.as_ref() }.tail();
         }
     }
 }

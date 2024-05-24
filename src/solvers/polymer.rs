@@ -68,27 +68,55 @@ impl SolverOps for PolymerSolver {
         }
 
         // Compute new partition function
-        let partition_sum = self
-            .block_solvers
-            .last()
-            .unwrap()
-            .forward_propagator()
-            .last()
-            .sum();
+        let partition_sum = self.block_solvers[0].reverse_ref().q_last().sum();
         self.state.partition = partition_sum / domain.mesh_size() as f64;
 
+        // Get block density and accumulate in solver state
         let prefactor = self.polymer.fraction / self.polymer.size(&monomers) / self.state.partition;
-
-        // Update block density and accumulate density in solver state
         for (id, rho) in self.state.density.iter_mut() {
             rho.fill(0.0);
             for solver in self.block_solvers.iter() {
                 if solver.block.monomer_id != *id {
                     continue;
                 }
-                let density = solver.density(prefactor);
+                let density = prefactor * solver.density();
                 *rho += &density;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use ndarray_rand::{rand_distr::Normal, RandomExt};
+
+    use super::PolymerSolver;
+    use crate::{
+        chem::{Block, Monomer, Polymer},
+        domain::{Domain, Mesh, UnitCell},
+        fields::RField,
+        solvers::SolverOps,
+    };
+
+    #[test]
+    fn test_polymer_solver() {
+        let mesh = Mesh::One(128);
+        let cell = UnitCell::lamellar(10.0).unwrap();
+        let domain = Domain::new(mesh, cell).unwrap();
+        let fields = vec![RField::random(mesh, Normal::new(0.0, 0.1).unwrap())];
+
+        let monomer = Monomer::new(0, 1.0);
+        let block = Block::new(monomer.id, 100, 1.0);
+        let polymer = Polymer::new(vec![block], 100, 1.0);
+
+        let mut solver = PolymerSolver::new(polymer, mesh);
+
+        let now = Instant::now();
+        solver.solve(&domain, &fields, &[monomer]);
+        let elapsed = now.elapsed();
+
+        dbg!(elapsed);
     }
 }
