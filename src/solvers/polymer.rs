@@ -101,6 +101,7 @@ impl SolverOps for PolymerSolver {
 mod tests {
     use std::time::Instant;
 
+    use ndarray::Array1;
     use ndarray_rand::{rand_distr::Normal, RandomExt};
 
     use crate::{
@@ -112,14 +113,28 @@ mod tests {
 
     #[test]
     fn test_polymer_solver() {
-        let mesh = Mesh::One(128);
-        let cell = UnitCell::lamellar(10.0).unwrap();
-        let domain = Domain::new(mesh, cell).unwrap();
-        let fields = vec![RField::random(mesh, Normal::new(0.0, 0.1).unwrap())];
+        let n = 100;
+        let ns = 100;
+        let b = 1.0;
+        let rg = ((n as f64) * b * b / 6.0).sqrt();
+
+        let length = 10.0 * rg;
+        let nx = 128;
+
+        let x = Array1::linspace(0.0, length, nx);
+
+        let field = (3.0 * (&x - length / 2.0) / (2.0 * rg));
+        let field = field.mapv(|f| (1.0 - 2.0 * f.cosh().powf(-2.0)) / n as f64);
+        let field = field.into_dyn();
+        let fields = vec![field];
 
         let monomer = Monomer::new(0, 1.0);
-        let block = Block::new(monomer, 100, 1.0);
-        let polymer = Polymer::new(vec![block], 100, 1.0);
+        let block = Block::new(monomer, n, b);
+        let polymer = Polymer::new(vec![block], ns, 1.0);
+
+        let mesh = Mesh::One(nx);
+        let cell = UnitCell::lamellar(length).unwrap();
+        let domain = Domain::new(mesh, cell).unwrap();
 
         let mut solver = PolymerSolver::new(polymer, mesh);
 
@@ -127,6 +142,7 @@ mod tests {
         solver.solve(&domain, &fields, &[monomer]);
         let elapsed = now.elapsed();
 
-        dbg!(elapsed);
+        dbg!(x.as_slice().unwrap());
+        dbg!(solver.state().density.get(&0).unwrap().as_slice().unwrap());
     }
 }

@@ -164,33 +164,33 @@ impl PropagatorStep {
 
 #[derive(Debug)]
 pub(super) struct Propagator {
-    qfields: Vec<RField>,
+    q_fields: Vec<RField>,
     sources: Vec<NonNull<Propagator>>,
 }
 
 impl Propagator {
     pub fn new(mesh: Mesh, ns: usize) -> Self {
-        let qfields = (0..ns).map(|_| RField::zeros(mesh)).collect();
+        let q_fields = (0..ns).map(|_| RField::zeros(mesh)).collect();
         Self {
-            qfields,
+            q_fields,
             sources: Vec::new(),
         }
     }
 
     pub fn ns(&self) -> usize {
-        self.qfields.len()
+        self.q_fields.len()
     }
 
     pub fn q_fields(&self) -> &[RField] {
-        &self.qfields
+        &self.q_fields
     }
 
     pub fn head(&self) -> &RField {
-        &self.qfields[0]
+        &self.q_fields[0]
     }
 
     pub fn tail(&self) -> &RField {
-        &self.qfields[self.ns() - 1]
+        &self.q_fields[self.ns() - 1]
     }
 
     pub fn add_source(&mut self, source: &mut Propagator) {
@@ -204,7 +204,7 @@ impl Propagator {
 
         // Propagate from 1..ns
         for s in 1..self.ns() {
-            let (left, right) = self.qfields.split_at_mut(s);
+            let (left, right) = self.q_fields.split_at_mut(s);
             let q_in = left.last().unwrap();
             let q_out = right.first_mut().unwrap();
             step.apply(q_in, q_out, StepMethod::RQM4)
@@ -214,7 +214,7 @@ impl Propagator {
     fn update_head(&mut self) {
         // Head begins with 1.0 in all elements
         // Each source is applied multiplicatively to the initial condition
-        let mut head = &mut self.qfields[0];
+        let mut head = &mut self.q_fields[0];
         head.fill(1.0);
 
         for source in self.sources.iter() {

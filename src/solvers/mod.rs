@@ -6,4 +6,4 @@ mod solver;
 
 pub use point::PointSolver;
 pub use polymer::PolymerSolver;
-pub use solver::{SolverOps, SolverState};
+pub use solver::{SolverOps, SolverState, SpeciesSolver};
