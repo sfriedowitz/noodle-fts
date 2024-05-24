@@ -1,9 +1,11 @@
-use super::{BlockSolver, SolverOps, SolverState};
+use super::{
+    block::{BlockSolver, PropagatorDirection},
+    SolverOps, SolverState,
+};
 use crate::{
     chem::{Monomer, Polymer, Species, SpeciesDescription},
     domain::{Domain, Mesh},
     fields::RField,
-    solvers::PropagatorDirection,
 };
 
 #[derive(Debug)]
@@ -25,14 +27,14 @@ impl PolymerSolver {
             .blocks
             .iter()
             .copied()
-            .map(|b| BlockSolver::new(b, mesh, 10, 1.0)) // TODO: Real discretize here
+            .map(|b| BlockSolver::new(b, mesh, 100, 1.0)) // TODO: Real discretize here
             .collect();
 
         for idx in 1..block_solvers.len() {
             let (head, tail) = block_solvers.split_at_mut(idx);
             let predecessor = head.last_mut().unwrap();
             let successor = tail.first_mut().unwrap();
-            successor.link_predecessor(predecessor);
+            successor.add_source(predecessor);
         }
 
         Self {
@@ -68,19 +70,22 @@ impl SolverOps for PolymerSolver {
         }
 
         // Compute new partition function
-        let partition_sum = self.block_solvers[0].reverse_ref().q_last().sum();
+        let partition_sum = self.block_solvers[0].reverse_propagator().tail().sum();
         self.state.partition = partition_sum / domain.mesh_size() as f64;
 
-        // Get block density and accumulate in solver state
+        // Update solver density
         let prefactor = self.polymer.fraction / self.polymer.size(&monomers) / self.state.partition;
+        for solver in self.block_solvers.iter_mut() {
+            solver.update_density(prefactor);
+        }
+
+        // Accumulate per-block density in solver state
         for (id, rho) in self.state.density.iter_mut() {
             rho.fill(0.0);
             for solver in self.block_solvers.iter() {
-                if solver.block.monomer_id != *id {
-                    continue;
+                if solver.block.monomer_id == *id {
+                    *rho += solver.density();
                 }
-                let density = prefactor * solver.density();
-                *rho += &density;
             }
         }
     }
@@ -92,12 +97,11 @@ mod tests {
 
     use ndarray_rand::{rand_distr::Normal, RandomExt};
 
-    use super::PolymerSolver;
     use crate::{
         chem::{Block, Monomer, Polymer},
         domain::{Domain, Mesh, UnitCell},
         fields::RField,
-        solvers::SolverOps,
+        solvers::{PolymerSolver, SolverOps},
     };
 
     #[test]

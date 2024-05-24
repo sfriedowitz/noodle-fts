@@ -9,13 +9,13 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub enum StepMethod {
+pub(super) enum StepMethod {
     RK2,
     RQM4,
 }
 
 #[derive(Debug)]
-pub struct PropagatorStep {
+pub(super) struct PropagatorStep {
     fft: FFT,
     // Operator arrays
     lw_full: RField,
@@ -163,14 +163,14 @@ impl PropagatorStep {
 }
 
 #[derive(Debug)]
-pub(super) struct Propagator {
+pub struct Propagator {
     qfields: Vec<RField>,
     sources: Vec<NonNull<Propagator>>,
 }
 
 impl Propagator {
-    pub fn new(mesh: Mesh, ngrid: usize) -> Self {
-        let qfields = (0..ngrid).map(|_| RField::zeros(mesh)).collect();
+    pub fn new(mesh: Mesh, ns: usize) -> Self {
+        let qfields = (0..ns).map(|_| RField::zeros(mesh)).collect();
         Self {
             qfields,
             sources: Vec::new(),
@@ -193,8 +193,9 @@ impl Propagator {
         &self.qfields[self.ns() - 1]
     }
 
-    pub fn add_source(&mut self, source: NonNull<Propagator>) {
-        self.sources.push(source)
+    pub fn add_source(&mut self, source: &mut Propagator) {
+        let source_ptr = NonNull::new(source).unwrap();
+        self.sources.push(source_ptr)
     }
 
     pub fn propagate(&mut self, step: &mut PropagatorStep) {
@@ -228,12 +229,11 @@ mod tests {
     use std::time::Instant;
 
     use ndarray_rand::{rand_distr::Normal, RandomExt};
-    use propagator::Propagator;
 
     use crate::{
         domain::{Domain, Mesh, UnitCell},
         fields::RField,
-        solvers::{propagator, PropagatorStep},
+        solvers::propagator::{Propagator, PropagatorStep},
     };
 
     #[test]

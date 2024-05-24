@@ -1,12 +1,13 @@
 use std::{
     borrow::Borrow,
     cell::{Ref, RefCell, RefMut},
+    ptr::NonNull,
     rc::Rc,
 };
 
 use ndarray::Zip;
 
-use super::{Propagator, PropagatorStep};
+use super::propagator::{Propagator, PropagatorStep};
 use crate::{
     chem::{Block, Monomer},
     domain::Mesh,
@@ -20,54 +21,56 @@ pub enum PropagatorDirection {
 }
 
 #[derive(Debug)]
-pub struct BlockSolver {
+pub(super) struct BlockSolver {
     pub block: Block,
     step: PropagatorStep,
-    step_size: f64,
-    forward: Rc<RefCell<Propagator>>,
-    reverse: Rc<RefCell<Propagator>>,
+    forward: Propagator,
+    reverse: Propagator,
+    density: RField,
+    ds: f64,
 }
 
 impl BlockSolver {
-    pub fn new(block: Block, mesh: Mesh, ngrid: usize, step_size: f64) -> Self {
+    pub fn new(block: Block, mesh: Mesh, ns: usize, ds: f64) -> Self {
         let step = PropagatorStep::new(mesh);
-        let forward = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)));
-        let reverse = Rc::new(RefCell::new(Propagator::new(mesh, ngrid)));
+        let forward = Propagator::new(mesh, ns);
+        let reverse = Propagator::new(mesh, ns);
+        let density = RField::zeros(mesh);
         Self {
             block,
             step,
-            step_size,
             forward,
             reverse,
+            density,
+            ds,
         }
     }
 
-    pub fn forward_ref(&self) -> Ref<Propagator> {
-        (*self.forward).borrow()
+    pub fn density(&self) -> &RField {
+        &self.density
     }
 
-    pub fn reverse_ref(&self) -> Ref<Propagator> {
-        (*self.reverse).borrow()
+    pub fn forward_propagator(&self) -> &Propagator {
+        &self.forward
     }
 
-    pub fn link_predecessor(&mut self, predecessor: &mut Self) {
-        // Predecessor's forward is the source of this forward
-        self.forward
-            .borrow_mut()
-            .add_source(predecessor.forward.clone());
-        // This reverse is the source of predecessor's reverse
-        predecessor
-            .reverse
-            .borrow_mut()
-            .add_source(self.reverse.clone());
+    pub fn reverse_propagator(&self) -> &Propagator {
+        &self.reverse
+    }
+
+    pub fn add_source(&mut self, other: &mut Self) {
+        // Others's forward is the source of this forward
+        self.forward.add_source(&mut other.forward);
+
+        // This reverse is the source of other's reverse
+        other.reverse.add_source(&mut self.reverse);
     }
 
     pub fn propagate(&mut self, direction: PropagatorDirection) {
-        let mut propagator = match direction {
-            PropagatorDirection::Forward => self.forward.borrow_mut(),
-            PropagatorDirection::Reverse => self.reverse.borrow_mut(),
-        };
-        propagator.propagate(&mut self.step);
+        match direction {
+            PropagatorDirection::Forward => self.forward.propagate(&mut self.step),
+            PropagatorDirection::Reverse => self.reverse.propagate(&mut self.step),
+        }
     }
 
     pub fn update_step(&mut self, monomers: &[Monomer], fields: &[RField], ksq: &RField) {
@@ -75,26 +78,18 @@ impl BlockSolver {
         let monomer_size = monomers[monomer_id].size;
         let field = &fields[monomer_id];
 
-        self.step.update(
-            field,
-            ksq,
-            self.step_size,
-            monomer_size,
-            self.block.segment_length,
-        )
+        self.step
+            .update(field, ksq, monomer_size, self.block.segment_length, self.ds)
     }
 
-    pub fn density(&self) -> RField {
-        let forward_propagator = self.forward_ref();
-        let qf = forward_propagator.q_fields();
+    pub fn update_density(&mut self, prefactor: f64) {
+        let qf = self.forward.qfields();
+        let qr = self.reverse.qfields();
 
-        let reverse_propagator = self.reverse_ref();
-        let qr = reverse_propagator.q_fields();
-
-        let ns = forward_propagator.ns();
-        let mut density = RField::zeros(qf[0].shape());
+        let ns = self.forward_propagator().ns();
 
         // Simpson's rule integration of qf * qr
+        self.density.fill(0.0);
         for s in 0..ns {
             let coef = if s == 0 || s == ns - 1 {
                 // Endpoints
@@ -106,15 +101,15 @@ impl BlockSolver {
                 // Odd indices
                 4.0
             };
-            Zip::from(&mut density)
+            // We integrate at contour position `s` for both forward and reverse
+            // because index 0 into the qr vector is for position Ns on the chain
+            Zip::from(&mut self.density)
                 .and(&qf[s])
                 .and(&qr[s])
-                .for_each(|out, x, y| *out += coef * x * y);
+                .for_each(|rho, x, y| *rho += coef * x * y);
         }
 
         // Normalize the integral
-        density *= self.step_size / 3.0;
-
-        density
+        self.density *= prefactor * (self.ds / 3.0);
     }
 }
