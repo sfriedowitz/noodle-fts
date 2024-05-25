@@ -1,6 +1,7 @@
 use crate::{
     chem::Species,
     domain::Domain,
+    error::Result,
     fields::RField,
     solvers::{SolverOps, SpeciesSolver},
 };
@@ -11,12 +12,19 @@ pub enum Ensemble {
     Closed,
 }
 
+pub struct SystemState {
+    pub fields: Vec<RField>,
+    pub density: Vec<RField>,
+    pub potentials: Vec<RField>,
+    pub residuals: Vec<RField>,
+    pub partitions: Vec<f64>,
+}
+
 pub struct System {
     ensemble: Ensemble,
     domain: Domain,
+    state: SystemState,
     solvers: Vec<SpeciesSolver>,
-    fields: Vec<RField>,
-    density: Vec<RField>,
 }
 
 impl System {
@@ -36,23 +44,29 @@ impl System {
         self.solvers.iter().map(|s| s.species()).collect()
     }
 
-    pub fn fields(&self) -> &[RField] {
-        &self.fields
+    pub fn state(&self) -> &SystemState {
+        &self.state
     }
 
-    pub fn fields_mut(&mut self) -> &mut [RField] {
-        &mut self.fields
-    }
+    pub fn solve(&mut self) -> Result<()> {
+        // Update ksq grid
+        self.domain.update_ksq()?;
 
-    pub fn density(&self) -> &[RField] {
-        &self.density
-    }
-
-    pub fn solve(&mut self) {
         // Solve each species
         for solver in self.solvers.iter_mut() {
-            solver.solve(&self.domain, &self.fields)
+            solver.solve(&self.domain, &self.state.fields)
         }
+
         // Accumulate solver states into system state
+
+        Ok(())
+    }
+
+    pub fn free_energy(&self) -> f64 {
+        todo!()
+    }
+
+    pub fn free_energy_bulk(&self) -> f64 {
+        todo!()
     }
 }

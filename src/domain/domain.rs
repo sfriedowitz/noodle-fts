@@ -3,7 +3,7 @@ use ndarray::{Array2, Axis};
 
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
-    error::{Error, Result},
+    error::{FTSError, Result},
     fields::RField,
     math::{fftfreq, rfftfreq, TWO_PI},
 };
@@ -52,7 +52,7 @@ pub struct Domain {
 impl Domain {
     pub fn new(mesh: Mesh, cell: UnitCell) -> Result<Self> {
         if mesh.ndim() != cell.ndim() {
-            return Err(Error::DimensionMismatch("mesh".into(), "cell".into()));
+            return Err(FTSError::DimensionMismatch("mesh".into(), "cell".into()));
         }
         let ksq = RField::zeros(mesh.kmesh());
         Ok(Self { mesh, cell, ksq })
@@ -79,7 +79,7 @@ impl Domain {
     }
 
     pub fn update_ksq(&mut self) -> Result<()> {
-        // TODO: Figure out how to do this without allocating as much
+        // TODO: Figure out how to do this without allocating new arrays each time
         let kvecs = match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
             Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),

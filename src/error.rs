@@ -1,9 +1,9 @@
 use thiserror::Error;
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T> = ::std::result::Result<T, FTSError>;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum FTSError {
     #[error("linear algebra error")]
     Linalg(#[from] ndarray_linalg::error::LinalgError),
     #[error("shape error")]
