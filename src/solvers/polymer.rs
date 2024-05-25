@@ -36,10 +36,8 @@ impl PolymerSolver {
                 // ns is guaranteed to be at least 3 for each block,
                 // which results in an even number of contour steps per block
                 let ns = (b.size() / (2.0 * target_ds) + 0.5).floor() as usize;
-                let ns = ns.max(1);
-                let ns = 2 * ns + 1;
+                let ns = 2 * ns.max(1) + 1;
                 let ds = b.size() / ((ns - 1) as f64);
-
                 BlockSolver::new(b, mesh, ns, ds)
             })
             .collect()
@@ -57,25 +55,29 @@ impl SolverOps for PolymerSolver {
 
     fn solve<'a>(&mut self, domain: &Domain, fields: &[RField]) {
         // Get ksq grid from domain
-        let ksq = domain.ksq().unwrap();
+        let ksq = domain.ksq();
 
-        // Propagate forward (update step operators before)
-        let mut forward_source: Option<&RField> = None;
+        // Update solver steps with current fields
         for solver in self.solvers.iter_mut() {
             solver.update_step(&fields, &ksq);
-            solver.solve(forward_source, PropagatorDirection::Forward);
-            forward_source = Some(solver.forward().tail());
         }
 
-        // Propagate reverse
-        let mut reverse_source: Option<&RField> = None;
+        // Propagate forward (initialize first solver w/ empty source)
+        let mut source: Option<&RField> = None;
+        for solver in self.solvers.iter_mut() {
+            solver.solve(source, PropagatorDirection::Forward);
+            source = Some(solver.forward().tail());
+        }
+
+        // Propagate reverse (initialize last solver w/ empty source)
+        source = None;
         for solver in self.solvers.iter_mut().rev() {
-            solver.solve(reverse_source, PropagatorDirection::Reverse);
-            reverse_source = Some(solver.reverse().tail());
+            solver.solve(source, PropagatorDirection::Reverse);
+            source = Some(solver.reverse().tail());
         }
 
         // Compute new partition function
-        let partition_sum = self.solvers[0].reverse().tail().sum();
+        let partition_sum = self.solvers.last().unwrap().forward().tail().sum();
         self.state.partition = partition_sum / domain.mesh_size() as f64;
 
         // Update solver density

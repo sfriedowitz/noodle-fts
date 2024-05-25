@@ -46,6 +46,7 @@ fn get_kvecs_3d(nx: usize, ny: usize, nz: usize) -> Array2<f64> {
 pub struct Domain {
     mesh: Mesh,
     cell: UnitCell,
+    ksq: RField,
 }
 
 impl Domain {
@@ -53,29 +54,43 @@ impl Domain {
         if mesh.ndim() != cell.ndim() {
             return Err(Error::DimensionMismatch("mesh".into(), "cell".into()));
         }
-        Ok(Self { mesh, cell })
+        let ksq = RField::zeros(mesh.kmesh());
+        Ok(Self { mesh, cell, ksq })
     }
 
     pub fn ndim(&self) -> usize {
         self.mesh.ndim()
     }
 
+    pub fn mesh(&self) -> Mesh {
+        self.mesh
+    }
+
+    pub fn cell(&self) -> &UnitCell {
+        &self.cell
+    }
+
     pub fn mesh_size(&self) -> usize {
         self.mesh.size()
     }
 
-    pub fn ksq(&self) -> Result<RField> {
+    pub fn ksq(&self) -> &RField {
+        &self.ksq
+    }
+
+    pub fn update_ksq(&mut self) -> Result<()> {
+        // TODO: Figure out how to do this without allocating as much
         let kvecs = match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
             Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),
             Mesh::Three(nx, ny, nz) => get_kvecs_3d(nx, ny, nz),
         };
         let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
-
-        (kvecs * kvecs_scaled)
+        let ksq = (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
-            .into_shape(self.mesh.kmesh())
-            .map_err(Error::from)
+            .into_shape(self.mesh.kmesh())?;
+        self.ksq.assign(&ksq);
+        Ok(())
     }
 }
 
@@ -88,16 +103,16 @@ mod tests {
 
     #[test]
     fn test_ksq() {
-        let mesh = Mesh::Two(64, 64);
-        let cell = UnitCell::hexagonal_2d(1.0).unwrap();
+        let mesh = Mesh::Two(4, 4);
+        let cell = UnitCell::square(100.0).unwrap();
 
         let mut domain = Domain::new(mesh, cell).unwrap();
 
         let now = Instant::now();
-        let ksq = domain.ksq();
+        domain.update_ksq();
         let elapsed = now.elapsed();
 
-        // dbg!(ksq);
+        // dbg!(domain.ksq());
 
         dbg!(elapsed);
     }

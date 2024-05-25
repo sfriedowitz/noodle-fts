@@ -30,3 +30,12 @@ pub enum SpeciesSolver {
     PointSolver,
     PolymerSolver,
 }
+
+impl SpeciesSolver {
+    pub fn new(species: Species, mesh: Mesh) -> Self {
+        match species {
+            Species::Point(s) => PointSolver::new(s, mesh).into(),
+            Species::Polymer(s) => PolymerSolver::new(s, mesh).into(),
+        }
+    }
+}

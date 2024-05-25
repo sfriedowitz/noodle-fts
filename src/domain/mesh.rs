@@ -1,6 +1,6 @@
 use ndarray::{IntoDimension, IxDyn};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mesh {
     One(usize),
     Two(usize, usize),
