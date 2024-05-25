@@ -1,20 +1,15 @@
-use super::{grid::ContourGrid, step::PropagatorStep, SolverOps, SolverState};
+use super::{BlockSolver, PropagatorDirection, SolverOps, SolverState};
 use crate::{
-    chem::{Monomer, Polymer, Species, SpeciesDescription},
+    chem::{Polymer, Species, SpeciesDescription},
     domain::{Domain, Mesh},
     fields::RField,
-    solvers::step::StepMethod,
 };
 
 #[derive(Debug)]
 pub struct PolymerSolver {
     polymer: Polymer,
     state: SolverState,
-    grid: ContourGrid,
-    step: PropagatorStep,
-    qforward: Vec<RField>,
-    qreverse: Vec<RField>,
-    density: RField,
+    solvers: Vec<BlockSolver>,
 }
 
 impl PolymerSolver {
@@ -23,23 +18,31 @@ impl PolymerSolver {
         for monomer in polymer.monomers() {
             state.density.insert(monomer.id, RField::zeros(mesh));
         }
-
-        let grid = ContourGrid::new(&polymer);
-        let step = PropagatorStep::new(mesh);
-
-        let qforward = (0..grid.ns()).map(|_| RField::zeros(mesh)).collect();
-        let qreverse = (0..grid.ns()).map(|_| RField::zeros(mesh)).collect();
-        let density = RField::zeros(mesh);
-
+        let solvers = Self::build_block_solvers(&polymer, mesh);
         Self {
             polymer,
             state,
-            grid,
-            step,
-            qforward,
-            qreverse,
-            density,
+            solvers,
         }
+    }
+
+    fn build_block_solvers(polymer: &Polymer, mesh: Mesh) -> Vec<BlockSolver> {
+        let target_ds = polymer.size() / polymer.contour_steps as f64;
+        polymer
+            .blocks
+            .iter()
+            .cloned()
+            .map(|b| {
+                // ns is guaranteed to be at least 3 for each block,
+                // which results in an even number of contour steps per block
+                let ns = (b.size() / (2.0 * target_ds) + 0.5).floor() as usize;
+                let ns = ns.max(1);
+                let ns = 2 * ns + 1;
+                let ds = b.size() / ((ns - 1) as f64);
+
+                BlockSolver::new(b, mesh, ns, ds)
+            })
+            .collect()
     }
 }
 
@@ -56,48 +59,93 @@ impl SolverOps for PolymerSolver {
         // Get ksq grid from domain
         let ksq = domain.ksq().unwrap();
 
-        // // Forward propagation
-        // self.qforward[0].fill(1.0);
-        // for block in self.grid.into_iter() {
-        //     // Update step with block-specific fields before propagation
-        //     let field = &fields[block.monomer_id];
-        //     self.step.update(
-        //         field,
-        //         &ksq,
-        //         block.monomer_size,
-        //         block.segment_length,
-        //         block.ds,
-        //     );
-        //     // Propagate for range of block
-        //     for s in block.forward_range() {
-        //         let (left, right) = self.qforward.split_at_mut(s);
-        //         let q_in = &left[left.len() - 1];
-        //         let mut q_out = &mut right[0];
-        //         self.step.apply(q_in, q_out, StepMethod::RQM4);
-        //     }
-        // }
+        // Propagate forward (update step operators before)
+        let mut forward_source: Option<&RField> = None;
+        for solver in self.solvers.iter_mut() {
+            solver.update_step(&fields, &ksq);
+            solver.solve(forward_source, PropagatorDirection::Forward);
+            forward_source = Some(solver.forward().tail());
+        }
 
-        // // Reverse propagation
-        // self.qreverse[0].fill(1.0);
-        // for block in self.grid.into_iter().rev() {
-        //     // Update step with block-specific fields before propagation
-        //     let field = &fields[block.monomer_id];
-        //     self.step.update(
-        //         field,
-        //         &ksq,
-        //         block.monomer_size,
-        //         block.segment_length,
-        //         block.ds,
-        //     );
-        //     // Propagate for range of block
-        //     for s in block.forward_range() {
-        //         let (left, right) = self.qreverse.split_at_mut(s);
-        //         let q_in = &left[left.len() - 1];
-        //         let mut q_out = &mut right[0];
-        //         self.step.apply(q_in, q_out, StepMethod::RQM4);
-        //     }
-        // }
+        // Propagate reverse
+        let mut reverse_source: Option<&RField> = None;
+        for solver in self.solvers.iter_mut().rev() {
+            solver.solve(reverse_source, PropagatorDirection::Reverse);
+            reverse_source = Some(solver.reverse().tail());
+        }
 
-        todo!()
+        // Compute new partition function
+        let partition_sum = self.solvers[0].reverse().tail().sum();
+        self.state.partition = partition_sum / domain.mesh_size() as f64;
+
+        // Update solver density
+        let prefactor = self.polymer.fraction / self.polymer.size() / self.state.partition;
+        for solver in self.solvers.iter_mut() {
+            solver.update_density(prefactor);
+        }
+
+        // Accumulate per-block density in solver state
+        for (id, rho) in self.state.density.iter_mut() {
+            rho.fill(0.0);
+            for solver in self.solvers.iter() {
+                if solver.block().monomer.id == *id {
+                    *rho += solver.density();
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use ndarray::Array1;
+    use ndarray_rand::{rand_distr::Normal, RandomExt};
+
+    use crate::{
+        chem::{Block, Monomer, Polymer},
+        domain::{Domain, Mesh, UnitCell},
+        fields::RField,
+        solvers::{PolymerSolver, SolverOps},
+    };
+
+    #[test]
+    fn test_polymer_solver() {
+        let n = 100;
+        let ns = 100;
+        let b = 1.0;
+        let rg = ((n as f64) * b * b / 6.0).sqrt();
+
+        let length = 10.0 * rg;
+        let nx = 128;
+
+        let x = Array1::linspace(0.0, length, nx);
+
+        let field = (3.0 * (&x - length / 2.0) / (2.0 * rg));
+        let field_a = field
+            .mapv(|f| (1.0 - 2.0 * f.cosh().powf(-2.0)) / n as f64)
+            .into_dyn();
+        let field_b = -1.0 * &field_a;
+        let fields = vec![field_a, field_b];
+
+        let monomer_a = Monomer::new(0, 1.0);
+        let monomer_b = Monomer::new(1, 1.0);
+        let block_a = Block::new(monomer_a, n, b);
+        let block_b = Block::new(monomer_b, n, b);
+        let polymer = Polymer::new(vec![block_a, block_b], ns, 1.0);
+
+        let mesh = Mesh::One(nx);
+        let cell = UnitCell::lamellar(length).unwrap();
+        let domain = Domain::new(mesh, cell).unwrap();
+
+        let mut solver = PolymerSolver::new(polymer, mesh);
+
+        let now = Instant::now();
+        solver.solve(&domain, &fields);
+        let elapsed = now.elapsed();
+
+        dbg!(x.as_slice().unwrap());
+        dbg!(solver.state().density.get(&0).unwrap().as_slice().unwrap());
     }
 }

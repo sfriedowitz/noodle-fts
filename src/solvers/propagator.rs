@@ -46,12 +46,12 @@ impl PropagatorStep {
         }
     }
 
-    pub fn update(
+    pub fn update_operators(
         &mut self,
         field: &RField,
         ksq: &RField,
-        monomer_size: f64,
         segment_length: f64,
+        monomer_size: f64,
         ds: f64,
     ) {
         let lw_coeff = ds / 2.0;
@@ -159,5 +159,64 @@ impl PropagatorStep {
             .and(input)
             .and(output)
             .for_each(|operator, input, output| *output = operator * input)
+    }
+}
+
+#[derive(Debug)]
+pub struct Propagator {
+    qfields: Vec<RField>,
+}
+
+impl Propagator {
+    pub fn new(mesh: Mesh, ns: usize) -> Self {
+        Self {
+            qfields: (0..ns).map(|_| RField::zeros(mesh)).collect(),
+        }
+    }
+
+    pub fn ns(&self) -> usize {
+        self.qfields.len()
+    }
+
+    pub fn head(&self) -> &RField {
+        &self.qfields[0]
+    }
+
+    pub fn head_mut(&mut self) -> &mut RField {
+        &mut self.qfields[0]
+    }
+
+    pub fn tail(&self) -> &RField {
+        &self.qfields[self.ns() - 1]
+    }
+
+    pub fn tail_mut(&mut self) -> &mut RField {
+        let s = self.ns() - 1;
+        &mut self.qfields[s]
+    }
+
+    pub fn position(&self, s: usize) -> &RField {
+        &self.qfields[s]
+    }
+
+    pub fn position_mut(&mut self, s: usize) -> &mut RField {
+        &mut self.qfields[s]
+    }
+
+    pub fn propagate(&mut self, step: &mut PropagatorStep) {
+        // Propagate from 1..ns
+        for s in 1..self.ns() {
+            let (left, right) = self.qfields.split_at_mut(s);
+            let q_in = left.last().unwrap();
+            let q_out = right.first_mut().unwrap();
+            step.apply(q_in, q_out, StepMethod::RQM4)
+        }
+    }
+
+    pub fn update_head<'a>(&mut self, sources: impl Iterator<Item = &'a RField>) {
+        self.head_mut().fill(1.0);
+        for source in sources {
+            *self.head_mut() *= source;
+        }
     }
 }

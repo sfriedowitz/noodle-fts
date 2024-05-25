@@ -1,11 +1,11 @@
-// mod block;
-mod grid;
+mod block;
 mod point;
 mod polymer;
+mod propagator;
 mod solver;
-mod step;
 
+pub use block::{BlockSolver, PropagatorDirection};
 pub use point::PointSolver;
 pub use polymer::PolymerSolver;
+pub use propagator::{Propagator, PropagatorStep, StepMethod};
 pub use solver::{SolverOps, SolverState, SpeciesSolver};
-pub use step::{PropagatorStep, StepMethod};
