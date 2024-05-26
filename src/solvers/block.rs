@@ -85,11 +85,8 @@ impl BlockSolver {
     }
 
     pub fn update_density(&mut self, prefactor: f64) {
-        // Propagators
         let qf = &self.forward;
         let qr = &self.reverse;
-
-        // Reset density buffer
         self.density.fill(0.0);
 
         // Simpson's rule integration of qf * qr

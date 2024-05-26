@@ -1,9 +1,14 @@
 use std::fmt;
 
-use ndrustfft::{ndfft_par, ndfft_r2c_par, ndifft_par, ndifft_r2c_par, FftHandler, R2cFftHandler};
+use ndrustfft::{
+    ndfft, ndfft_par, ndfft_r2c, ndfft_r2c_par, ndifft, ndifft_par, ndifft_r2c, ndifft_r2c_par,
+    FftHandler, R2cFftHandler,
+};
 
 use super::Mesh;
 use crate::{CField, RField};
+
+const PARALLEL_FFT_CUTOFF: usize = 50_000;
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
@@ -12,6 +17,7 @@ use crate::{CField, RField};
 #[derive(Clone)]
 pub struct FFT {
     // 1 real, ndim-1 complex handlers
+    parallel: bool,
     r2c_handler: R2cFftHandler<f64>,
     c2c_handlers: Vec<FftHandler<f64>>,
     // Work buffers with half-size last dimension
@@ -39,7 +45,11 @@ impl FFT {
         let work1 = CField::zeros(kmesh);
         let work2 = CField::zeros(kmesh);
 
+        // Empirical cutoff for when to use par FFT transforms
+        let parallel = mesh.size() >= PARALLEL_FFT_CUTOFF;
+
         Self {
+            parallel,
             r2c_handler,
             c2c_handlers,
             work1,
@@ -54,12 +64,20 @@ impl FFT {
     pub fn forward(&mut self, input: &RField, output: &mut CField) {
         // Transform the real -> complex dimension first
         let r2c_axis = self.ndim() - 1;
-        ndfft_r2c_par(input, output, &mut self.r2c_handler, r2c_axis);
+        if self.parallel {
+            ndfft_r2c_par(input, output, &mut self.r2c_handler, r2c_axis);
+        } else {
+            ndfft_r2c(input, output, &mut self.r2c_handler, r2c_axis);
+        }
 
         // Transform the remaining complex -> complex axes
         self.work1.assign(output);
         for (axis, handler) in self.c2c_handlers.iter_mut().enumerate() {
-            ndfft_par(&self.work1, output, handler, axis);
+            if self.parallel {
+                ndfft_par(&self.work1, output, handler, axis);
+            } else {
+                ndfft(&self.work1, output, handler, axis);
+            }
             self.work1.assign(output);
         }
     }
@@ -69,13 +87,21 @@ impl FFT {
         self.work1.assign(input);
         self.work2.assign(input);
         for (axis, handler) in self.c2c_handlers.iter_mut().enumerate() {
-            ndifft_par(&self.work1, &mut self.work2, handler, axis);
+            if self.parallel {
+                ndifft_par(&self.work1, &mut self.work2, handler, axis);
+            } else {
+                ndifft(&self.work1, &mut self.work2, handler, axis);
+            }
             self.work1.assign(&self.work2);
         }
 
         // Transform the accumulated work into the output array
         let r2c_axis = self.ndim() - 1;
-        ndifft_r2c_par(&self.work2, output, &mut self.r2c_handler, r2c_axis);
+        if self.parallel {
+            ndifft_r2c_par(&self.work2, output, &mut self.r2c_handler, r2c_axis);
+        } else {
+            ndifft_r2c(&self.work2, output, &mut self.r2c_handler, r2c_axis);
+        }
     }
 }
 

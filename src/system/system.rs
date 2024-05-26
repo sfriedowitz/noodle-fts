@@ -5,12 +5,6 @@ use crate::{
     RField, Result,
 };
 
-#[derive(Debug, Clone, Copy)]
-pub enum Ensemble {
-    Open,
-    Closed,
-}
-
 pub struct SystemState {
     pub fields: Vec<RField>,
     pub density: Vec<RField>,
@@ -20,14 +14,13 @@ pub struct SystemState {
 }
 
 pub struct System {
-    ensemble: Ensemble,
     domain: Domain,
     state: SystemState,
     solvers: Vec<SpeciesSolver>,
 }
 
 impl System {
-    pub fn new(ensemble: Ensemble, domain: Domain, species: Vec<Species>) -> Self {
+    pub fn new(domain: Domain, species: Vec<Species>) -> Self {
         todo!()
     }
 
@@ -47,7 +40,7 @@ impl System {
         &self.state
     }
 
-    pub fn solve(&mut self) -> Result<()> {
+    pub fn update(&mut self) -> Result<()> {
         // Update ksq grid
         self.domain.update_ksq()?;
 

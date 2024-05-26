@@ -95,24 +95,14 @@ impl Domain {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
 
-    use super::Domain;
-    use crate::domain::{Mesh, UnitCell};
+    use super::*;
 
     #[test]
-    fn test_ksq() {
-        let mesh = Mesh::Two(4, 4);
-        let cell = UnitCell::square(100.0).unwrap();
-
-        let mut domain = Domain::new(mesh, cell).unwrap();
-
-        let now = Instant::now();
-        domain.update_ksq();
-        let elapsed = now.elapsed();
-
-        // dbg!(domain.ksq());
-
-        dbg!(elapsed);
+    fn test_dimension_mismatch() {
+        let mesh = Mesh::One(32);
+        let cell = UnitCell::cubic(10.0).unwrap();
+        let domain = Domain::new(mesh, cell);
+        assert!(domain.is_err())
     }
 }
