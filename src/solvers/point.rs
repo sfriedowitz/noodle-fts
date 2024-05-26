@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-
 use ndarray::Zip;
 
 use super::{SolverOps, SolverState};
 use crate::{
-    chem::{Monomer, Point, Species, SpeciesDescription},
+    chem::{Point, Species},
     domain::{Domain, Mesh},
-    fields::RField,
+    RField,
 };
 
 #[derive(Debug)]
@@ -34,7 +32,7 @@ impl SolverOps for PointSolver {
     fn solve(&mut self, domain: &Domain, fields: &[RField]) {
         let monomer = self.point.monomer;
         let field = &fields[monomer.id];
-        let mut density = self.state.density.get_mut(&monomer.id).unwrap();
+        let density = self.state.density.get_mut(&monomer.id).unwrap();
 
         // Compute density field and partition function from omega field
         let mut partition_sum = 0.0;

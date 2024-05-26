@@ -1,6 +1,6 @@
-use ndarray::{Array, Array1, Axis, Dimension, Zip};
+use ndarray::{Array1, Axis};
 
-use crate::fields::{Field, RField};
+use crate::RField;
 
 pub const PI: f64 = std::f64::consts::PI;
 pub const HALF_PI: f64 = PI / 2.0;
@@ -47,11 +47,10 @@ pub fn simpsons(x: &RField, dx: Option<f64>, axis: Axis) -> RField {
 
 #[cfg(test)]
 mod tests {
-    use itertools::Itertools;
-    use ndarray::{Array0, Array1, Axis};
 
-    use super::{fftfreq, rfftfreq, simpsons};
-    use crate::fields::RField;
+    use ndarray::{Array1, Axis};
+
+    use super::*;
 
     #[test]
     fn test_fftfreq() {

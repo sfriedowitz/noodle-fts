@@ -1,9 +1,8 @@
 use crate::{
     chem::Species,
     domain::Domain,
-    error::Result,
-    fields::RField,
     solvers::{SolverOps, SpeciesSolver},
+    RField, Result,
 };
 
 #[derive(Debug, Clone, Copy)]

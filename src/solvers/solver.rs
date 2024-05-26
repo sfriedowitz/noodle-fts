@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use enum_dispatch::enum_dispatch;
 
@@ -6,7 +6,7 @@ use super::{PointSolver, PolymerSolver};
 use crate::{
     chem::{Monomer, Species},
     domain::{Domain, Mesh},
-    fields::RField,
+    RField,
 };
 
 #[derive(Debug)]

@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use super::{BlockSolver, PropagatorDirection, SolverOps, SolverState};
 use crate::{
     chem::{Polymer, Species, SpeciesDescription},
     domain::{Domain, Mesh},
-    fields::RField,
+    RField,
 };
 
 #[derive(Debug)]
@@ -76,8 +74,7 @@ impl SolverOps for PolymerSolver {
         }
 
         // Compute new partition function
-        let partition_sum = self.block_solvers[0].reverse().tail().sum();
-        self.state.partition = partition_sum / domain.mesh_size() as f64;
+        self.state.partition = self.block_solvers[0].partition();
 
         // Update solver density
         let prefactor = self.polymer.fraction / self.polymer.size() / self.state.partition;
@@ -102,35 +99,33 @@ mod tests {
     use std::time::Instant;
 
     use ndarray::Array1;
-    use ndarray_rand::{rand_distr::Normal, RandomExt};
 
+    use super::*;
     use crate::{
-        chem::{Block, Monomer, Polymer},
-        domain::{Domain, Mesh, UnitCell},
-        fields::RField,
-        solvers::{PolymerSolver, SolverOps},
+        chem::{Block, Monomer},
+        domain::UnitCell,
     };
 
     #[test]
     fn test_homopolymer() {
         let n = 100;
-        let ns = 100;
+        let contour_steps = 200;
         let b = 1.0;
-        let rg = ((n as f64) * b * b / 6.0).sqrt();
 
+        let rg = ((n as f64) * b * b / 6.0).sqrt();
         let length = 10.0 * rg;
         let nx = 64;
 
         let x = Array1::linspace(0.0, length, nx);
-        let field = (3.0 * (&x - length / 2.0) / (2.0 * rg));
+        let field = 3.0 * (&x - length / 2.0) / (2.0 * rg);
         let field = field
             .mapv(|f| (1.0 - 2.0 * f.cosh().powf(-2.0)) / n as f64)
             .into_dyn();
         let fields = vec![field];
 
         let monomer = Monomer::new(0, 1.0);
-        let block = Block::new(monomer, n, b);
-        let polymer = Polymer::new(vec![block], ns, 1.0);
+        let block = Block::new(monomer, n / 2, b);
+        let polymer = Polymer::new(vec![block, block], contour_steps, 1.0);
 
         let mesh = Mesh::One(nx);
         let cell = UnitCell::lamellar(length).unwrap();

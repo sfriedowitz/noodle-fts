@@ -1,6 +1,6 @@
 use ndarray::Array2;
 
-use crate::fields::RField;
+use crate::RField;
 
 pub struct Interaction {
     chi: Array2<f64>,

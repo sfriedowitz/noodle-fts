@@ -1,11 +1,10 @@
 use itertools::{iproduct, Itertools};
 use ndarray::{Array2, Axis};
 
-use super::{cell::UnitCell, mesh::Mesh};
+use super::{cell::UnitCell, mesh::Mesh, DomainError};
 use crate::{
-    error::{FTSError, Result},
-    fields::RField,
-    math::{fftfreq, rfftfreq, TWO_PI},
+    utils::math::{fftfreq, rfftfreq, TWO_PI},
+    RField, Result,
 };
 
 fn get_kvecs_1d(nx: usize) -> Array2<f64> {
@@ -52,7 +51,7 @@ pub struct Domain {
 impl Domain {
     pub fn new(mesh: Mesh, cell: UnitCell) -> Result<Self> {
         if mesh.ndim() != cell.ndim() {
-            return Err(FTSError::DimensionMismatch("mesh".into(), "cell".into()));
+            return Err(Box::new(DomainError::DimensionMismatch));
         }
         let ksq = RField::zeros(mesh.kmesh());
         Ok(Self { mesh, cell, ksq })

@@ -1,7 +1,9 @@
-use ndarray::{ArrayD, ArrayViewD};
-use num::{complex::Complex64, Zero};
+use ndarray::ArrayD;
+use num::complex::Complex64;
 
-use crate::domain::Mesh;
+// Error handling
+pub type Error = Box<dyn std::error::Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub type Field<T> = ArrayD<T>;
 // A multi-dimensional array with dynamic shape.

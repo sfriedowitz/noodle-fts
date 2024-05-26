@@ -3,8 +3,8 @@ use ndarray::{array, Array2};
 use ndarray_linalg::Inverse;
 
 use crate::{
-    error::Result,
-    math::{HALF_PI, THIRD_PI},
+    utils::math::{HALF_PI, THIRD_PI},
+    Result,
 };
 
 fn shape_tensor_1d(a: f64) -> Array2<f64> {
@@ -152,8 +152,8 @@ impl UnitCell {
     // Constructors
     pub fn new(parameters: CellParameters) -> Result<Self> {
         let shape = parameters.into_shape_tensor();
-        let shape_inv = shape.inv()?;
         let metric = shape.t().dot(&shape);
+        let shape_inv = shape.inv()?;
         let metric_inv = metric.inv()?;
 
         Ok(Self {
@@ -260,10 +260,10 @@ impl UnitCell {
 
 #[cfg(test)]
 mod tests {
+
     use ndarray::Array2;
 
-    use super::UnitCell;
-    use crate::math::{HALF_PI, THIRD_PI};
+    use super::*;
 
     fn check_cell_inverses(cell: &UnitCell) {
         let eye = Array2::eye(cell.ndim());

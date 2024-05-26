@@ -5,7 +5,7 @@ use num::complex::Complex64;
 
 use crate::{
     domain::{Mesh, FFT},
-    fields::{CField, Field, RField},
+    CField, Field, RField,
 };
 
 #[derive(Debug, Clone, Copy)]

@@ -1,12 +1,14 @@
 use std::fmt;
 
-use ndrustfft::{ndfft, ndfft_r2c, ndifft, ndifft_r2c, FftHandler, R2cFftHandler};
+use ndrustfft::{ndfft_par, ndfft_r2c_par, ndifft_par, ndifft_r2c_par, FftHandler, R2cFftHandler};
 
 use super::Mesh;
-use crate::fields::{CField, RField};
+use crate::{CField, RField};
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
+///
+/// Parallel seems to be faster when the total mesh size >= 200,000 or so.
 #[derive(Clone)]
 pub struct FFT {
     // 1 real, ndim-1 complex handlers
@@ -52,12 +54,12 @@ impl FFT {
     pub fn forward(&mut self, input: &RField, output: &mut CField) {
         // Transform the real -> complex dimension first
         let r2c_axis = self.ndim() - 1;
-        ndfft_r2c(input, output, &mut self.r2c_handler, r2c_axis);
+        ndfft_r2c_par(input, output, &mut self.r2c_handler, r2c_axis);
 
         // Transform the remaining complex -> complex axes
         self.work1.assign(output);
         for (axis, handler) in self.c2c_handlers.iter_mut().enumerate() {
-            ndfft(&self.work1, output, handler, axis);
+            ndfft_par(&self.work1, output, handler, axis);
             self.work1.assign(output);
         }
     }
@@ -67,13 +69,13 @@ impl FFT {
         self.work1.assign(input);
         self.work2.assign(input);
         for (axis, handler) in self.c2c_handlers.iter_mut().enumerate() {
-            ndifft(&self.work1, &mut self.work2, handler, axis);
+            ndifft_par(&self.work1, &mut self.work2, handler, axis);
             self.work1.assign(&self.work2);
         }
 
         // Transform the accumulated work into the output array
         let r2c_axis = self.ndim() - 1;
-        ndifft_r2c(&self.work2, output, &mut self.r2c_handler, r2c_axis);
+        ndifft_r2c_par(&self.work2, output, &mut self.r2c_handler, r2c_axis);
     }
 }
 
@@ -85,10 +87,8 @@ impl fmt::Debug for FFT {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        domain::{Mesh, FFT},
-        fields::{CField, RField},
-    };
+
+    use super::*;
 
     #[test]
     fn test_fft() {

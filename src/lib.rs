@@ -1,9 +1,11 @@
-#![allow(unused)]
+// #![allow(unused)]
 
 pub mod chem;
 pub mod domain;
-pub mod error;
-pub mod fields;
-pub mod math;
 pub mod solvers;
 pub mod system;
+pub mod types;
+pub mod utils;
+
+// Re-export custom type definitions for entire crate
+pub use types::*;

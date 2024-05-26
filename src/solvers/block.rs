@@ -1,11 +1,7 @@
 use ndarray::Zip;
 
 use super::{Propagator, PropagatorStep};
-use crate::{
-    chem::{Block, Monomer},
-    domain::Mesh,
-    fields::RField,
-};
+use crate::{chem::Block, domain::Mesh, RField};
 
 #[derive(Debug, Clone, Copy)]
 pub enum PropagatorDirection {
@@ -15,6 +11,7 @@ pub enum PropagatorDirection {
 
 #[derive(Debug)]
 pub struct BlockSolver {
+    mesh: Mesh,
     block: Block,
     step: PropagatorStep,
     forward: Propagator,
@@ -30,6 +27,7 @@ impl BlockSolver {
         let reverse = Propagator::new(mesh, ns);
         let density = RField::zeros(mesh);
         Self {
+            mesh,
             block,
             step,
             forward,
@@ -57,6 +55,13 @@ impl BlockSolver {
 
     pub fn reverse(&self) -> &Propagator {
         &self.reverse
+    }
+
+    pub fn partition(&self) -> f64 {
+        let partition_sum = Zip::from(self.forward.head())
+            .and(self.reverse.tail())
+            .fold(0.0, |acc, h, t| acc + h * t);
+        partition_sum / self.mesh.size() as f64
     }
 
     pub fn solve(&mut self, source: Option<&RField>, direction: PropagatorDirection) {
@@ -101,7 +106,7 @@ impl BlockSolver {
                 4.0
             };
             // We integrate at contour position `s` for both forward and reverse
-            // because index 0 into the qr vector is for position N on the chain
+            // because index 0 on the reverse propagator is for position N on the chain
             Zip::from(&mut self.density)
                 .and(qf.position(s))
                 .and(qr.position(s))

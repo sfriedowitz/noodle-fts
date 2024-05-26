@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 
@@ -115,7 +113,7 @@ impl SpeciesDescription for Polymer {
 #[cfg(test)]
 mod tests {
 
-    use crate::chem::{Block, Monomer, Point, Polymer, Species, SpeciesDescription};
+    use super::*;
 
     #[test]
     fn test_point_species() {
