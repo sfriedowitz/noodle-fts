@@ -1,4 +1,6 @@
-use super::{BlockSolver, PropagatorDirection, SolverOps, SolverState};
+use std::collections::HashMap;
+
+use super::{BlockSolver, PropagatorDirection, SolverOps};
 use crate::{
     chem::{Polymer, Species, SpeciesDescription},
     domain::{Domain, Mesh},
@@ -7,25 +9,32 @@ use crate::{
 
 #[derive(Debug)]
 pub struct PolymerSolver {
-    polymer: Polymer,
-    state: SolverState,
+    species: Polymer,
     block_solvers: Vec<BlockSolver>,
+    density: HashMap<usize, RField>,
+    partition: f64,
 }
 
 impl PolymerSolver {
-    pub fn new(mesh: Mesh, polymer: Polymer) -> Self {
-        let state = SolverState::new(mesh, polymer.monomers());
-        let block_solvers = Self::build_block_solvers(&polymer, mesh);
+    pub fn new(mesh: Mesh, species: Polymer) -> Self {
+        let block_solvers = Self::build_block_solvers(mesh, &species);
+        let density = HashMap::from_iter(
+            species
+                .monomers()
+                .iter()
+                .map(|m| (m.id, RField::zeros(mesh))),
+        );
         Self {
-            polymer,
-            state,
+            species,
             block_solvers,
+            density,
+            partition: 1.0,
         }
     }
 
-    fn build_block_solvers(polymer: &Polymer, mesh: Mesh) -> Vec<BlockSolver> {
-        let target_ds = polymer.size() / polymer.contour_steps as f64;
-        polymer
+    fn build_block_solvers(mesh: Mesh, species: &Polymer) -> Vec<BlockSolver> {
+        let target_ds = species.size() / species.contour_steps as f64;
+        species
             .blocks
             .iter()
             .cloned()
@@ -43,11 +52,15 @@ impl PolymerSolver {
 
 impl SolverOps for PolymerSolver {
     fn species(&self) -> Species {
-        self.polymer.clone().into()
+        self.species.clone().into()
     }
 
-    fn state(&self) -> &SolverState {
-        &self.state
+    fn partition(&self) -> f64 {
+        self.partition
+    }
+
+    fn density(&self) -> &HashMap<usize, RField> {
+        &self.density
     }
 
     fn solve(&mut self, domain: &Domain, fields: &[RField]) {
@@ -74,16 +87,16 @@ impl SolverOps for PolymerSolver {
         }
 
         // Compute new partition function
-        self.state.partition = self.block_solvers[0].partition();
+        self.partition = self.block_solvers[0].compute_partition();
 
         // Update solver density
-        let prefactor = self.polymer.fraction / self.polymer.size() / self.state.partition;
+        let prefactor = self.species.phi() / self.species.size() / self.partition;
         for solver in self.block_solvers.iter_mut() {
             solver.update_density(prefactor);
         }
 
         // Accumulate per-block density in solver state
-        for (id, density) in self.state.density.iter_mut() {
+        for (id, density) in self.density.iter_mut() {
             density.fill(0.0);
             for solver in self.block_solvers.iter() {
                 if solver.block().monomer.id == *id {
@@ -140,7 +153,7 @@ mod tests {
         let elapsed = now.elapsed();
 
         dbg!(x.as_slice().unwrap());
-        dbg!(solver.state().density.get(&0).unwrap().as_slice().unwrap());
+        dbg!(solver.density().get(&0).unwrap().as_slice().unwrap());
         dbg!(elapsed);
     }
 }

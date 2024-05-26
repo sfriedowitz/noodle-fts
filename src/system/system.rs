@@ -1,26 +1,22 @@
+use super::Interaction;
 use crate::{
-    chem::Species,
+    chem::{Monomer, Species},
     domain::Domain,
     solvers::{SolverOps, SpeciesSolver},
     RField, Result,
 };
 
-pub struct SystemState {
-    pub fields: Vec<RField>,
-    pub density: Vec<RField>,
-    pub potentials: Vec<RField>,
-    pub residuals: Vec<RField>,
-    pub partitions: Vec<f64>,
-}
-
 pub struct System {
     domain: Domain,
-    state: SystemState,
+    interaction: Interaction,
     solvers: Vec<SpeciesSolver>,
+    fields: Vec<RField>,
+    density: Vec<RField>,
+    residuals: Vec<RField>,
 }
 
 impl System {
-    pub fn new(domain: Domain, species: Vec<Species>) -> Self {
+    pub fn new(domain: Domain, interaction: Interaction, species: Vec<Species>) -> Self {
         todo!()
     }
 
@@ -36,22 +32,8 @@ impl System {
         self.solvers.iter().map(|s| s.species()).collect()
     }
 
-    pub fn state(&self) -> &SystemState {
-        &self.state
-    }
-
-    pub fn update(&mut self) -> Result<()> {
-        // Update ksq grid
-        self.domain.update_ksq()?;
-
-        // Solve each species
-        for solver in self.solvers.iter_mut() {
-            solver.solve(&self.domain, &self.state.fields)
-        }
-
-        // Accumulate solver states into system state
-
-        Ok(())
+    pub fn monomers(&self) -> Vec<Monomer> {
+        todo!()
     }
 
     pub fn free_energy(&self) -> f64 {
@@ -61,4 +43,20 @@ impl System {
     pub fn free_energy_bulk(&self) -> f64 {
         todo!()
     }
+
+    pub fn solve(&mut self) -> Result<()> {
+        // Update ksq grid
+        self.domain.update_ksq()?;
+
+        // Solve each species
+        for solver in self.solvers.iter_mut() {
+            solver.solve(&self.domain, &self.fields)
+        }
+
+        // Accumulate solver states into system state
+
+        Ok(())
+    }
 }
+
+pub struct SystemBuilder {}

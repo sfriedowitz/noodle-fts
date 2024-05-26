@@ -57,7 +57,7 @@ impl BlockSolver {
         &self.reverse
     }
 
-    pub fn partition(&self) -> f64 {
+    pub fn compute_partition(&self) -> f64 {
         let partition_sum = Zip::from(self.forward.head())
             .and(self.reverse.tail())
             .fold(0.0, |acc, h, t| acc + h * t);

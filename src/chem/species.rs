@@ -5,9 +5,9 @@ use super::{block::Block, monomer::Monomer};
 
 #[enum_dispatch]
 pub trait SpeciesDescription {
-    fn size(&self) -> f64;
+    fn phi(&self) -> f64;
 
-    fn fraction(&self) -> f64;
+    fn size(&self) -> f64;
 
     fn monomers(&self) -> Vec<Monomer>;
 
@@ -28,22 +28,22 @@ pub enum Species {
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
     pub monomer: Monomer,
-    pub fraction: f64,
+    phi: f64,
 }
 
 impl Point {
-    pub fn new(monomer: Monomer, fraction: f64) -> Self {
-        Self { monomer, fraction }
+    pub fn new(monomer: Monomer, phi: f64) -> Self {
+        Self { monomer, phi }
     }
 }
 
 impl SpeciesDescription for Point {
-    fn size(&self) -> f64 {
-        self.monomer.size
+    fn phi(&self) -> f64 {
+        self.phi
     }
 
-    fn fraction(&self) -> f64 {
-        self.fraction
+    fn size(&self) -> f64 {
+        self.monomer.size
     }
 
     fn monomers(&self) -> Vec<Monomer> {
@@ -63,15 +63,15 @@ impl SpeciesDescription for Point {
 pub struct Polymer {
     pub blocks: Vec<Block>,
     pub contour_steps: usize,
-    pub fraction: f64,
+    phi: f64,
 }
 
 impl Polymer {
-    pub fn new(blocks: Vec<Block>, contour_steps: usize, fraction: f64) -> Self {
+    pub fn new(blocks: Vec<Block>, contour_steps: usize, phi: f64) -> Self {
         Self {
             blocks,
             contour_steps,
-            fraction,
+            phi,
         }
     }
 
@@ -81,15 +81,15 @@ impl Polymer {
 }
 
 impl SpeciesDescription for Polymer {
+    fn phi(&self) -> f64 {
+        self.phi
+    }
+
     fn size(&self) -> f64 {
         self.blocks
             .iter()
             .map(|b| b.monomer.size * (b.repeat_units as f64))
             .sum()
-    }
-
-    fn fraction(&self) -> f64 {
-        self.fraction
     }
 
     fn monomers(&self) -> Vec<Monomer> {

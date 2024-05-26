@@ -1,38 +1,49 @@
+use std::collections::HashMap;
+
 use ndarray::Zip;
 
-use super::{SolverOps, SolverState};
+use super::SolverOps;
 use crate::{
-    chem::{Point, Species},
+    chem::{Point, Species, SpeciesDescription},
     domain::{Domain, Mesh},
     RField,
 };
 
 #[derive(Debug)]
 pub struct PointSolver {
-    point: Point,
-    state: SolverState,
+    species: Point,
+    density: HashMap<usize, RField>,
+    partition: f64,
 }
 
 impl PointSolver {
-    pub fn new(mesh: Mesh, point: Point) -> Self {
-        let state = SolverState::new(mesh, [point.monomer]);
-        Self { point, state }
+    pub fn new(mesh: Mesh, species: Point) -> Self {
+        let density = HashMap::from([(species.monomer.id, RField::zeros(mesh))]);
+        Self {
+            species,
+            density,
+            partition: 1.0,
+        }
     }
 }
 
 impl SolverOps for PointSolver {
     fn species(&self) -> Species {
-        self.point.into()
+        self.species.into()
     }
 
-    fn state(&self) -> &SolverState {
-        &self.state
+    fn partition(&self) -> f64 {
+        self.partition
+    }
+
+    fn density(&self) -> &HashMap<usize, RField> {
+        &self.density
     }
 
     fn solve(&mut self, domain: &Domain, fields: &[RField]) {
-        let monomer = self.point.monomer;
+        let monomer = self.species.monomer;
         let field = &fields[monomer.id];
-        let density = self.state.density.get_mut(&monomer.id).unwrap();
+        let density = self.density.get_mut(&monomer.id).unwrap();
 
         // Compute density field and partition function from omega field
         let mut partition_sum = 0.0;
@@ -44,10 +55,10 @@ impl SolverOps for PointSolver {
             });
 
         // Normalize partition sum
-        self.state.partition = partition_sum / domain.mesh_size() as f64;
+        self.partition = partition_sum / domain.mesh_size() as f64;
 
         // Normalize density inplace
-        let prefactor = self.point.fraction / self.state.partition;
+        let prefactor = self.species.phi() / self.partition;
         density.mapv_inplace(|rho| prefactor * rho);
     }
 }

@@ -44,12 +44,12 @@ impl Interaction {
         energy
     }
 
-    pub fn update_potentials(&self, density: &[RField], potentials: &mut [RField]) {
-        for omega in potentials.iter_mut() {
+    pub fn add_potentials(&self, density: &[RField], fields: &mut [RField]) {
+        for omega in fields.iter_mut() {
             omega.fill(0.0);
         }
         for (i, j) in self.iter_pairs() {
-            let omega_i = &mut potentials[i];
+            let omega_i = &mut fields[i];
             let rho_j = &density[j];
             let chi_ij = self.chi[[i, j]];
             Zip::from(omega_i)
