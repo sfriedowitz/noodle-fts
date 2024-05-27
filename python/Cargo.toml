@@ -1,9 +1,19 @@
 [package]
 name = "pyfts"
-version = "0.1.0"
-edition = "2021"
-authors = ["Sean Friedowitz"]
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license-file.workspace = true
 readme = "README.md"
+description = "Python bindings to the core FTS library."
+
+[lib]
+name = "pyfts"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = "0.21.2"
 
 [dependencies.fts]
 path = "../core"

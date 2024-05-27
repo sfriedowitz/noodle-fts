@@ -1,14 +1,15 @@
 [package]
 name = "fts"
-version = "0.1.0"
-edition = "2021"
-authors = ["Sean Friedowitz"]
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license-file.workspace = true
 readme = "README.md"
+description = "Core FTS library written in Rust."
 
 [lib]
 name = "fts"
 path = "src/lib.rs"
-bench = false
 
 [features]
 "openblas" = ["ndarray-linalg/openblas-system"]
