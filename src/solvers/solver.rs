@@ -28,8 +28,8 @@ pub enum SpeciesSolver {
 }
 
 impl SpeciesSolver {
-    pub fn new(mesh: Mesh, species: Species) -> Self {
-        match species {
+    pub fn new(mesh: Mesh, species: impl Into<Species>) -> Self {
+        match species.into() {
             Species::Point(point) => PointSolver::new(mesh, point).into(),
             Species::Polymer(polymer) => PolymerSolver::new(mesh, polymer).into(),
         }

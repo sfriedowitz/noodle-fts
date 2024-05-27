@@ -3,6 +3,7 @@ use ndarray::{Array2, Zip};
 
 use crate::RField;
 
+#[derive(Debug)]
 pub struct Interaction {
     chi: Array2<f64>,
 }
@@ -45,9 +46,6 @@ impl Interaction {
     }
 
     pub fn add_potentials(&self, density: &[RField], fields: &mut [RField]) {
-        for omega in fields.iter_mut() {
-            omega.fill(0.0);
-        }
         for (i, j) in self.iter_pairs() {
             let omega_i = &mut fields[i];
             let rho_j = &density[j];

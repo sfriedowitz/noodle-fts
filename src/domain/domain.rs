@@ -77,7 +77,7 @@ impl Domain {
         &self.ksq
     }
 
-    pub fn update_ksq(&mut self) -> Result<()> {
+    pub fn update_ksq(&mut self) {
         // TODO: Figure out how to do this without allocating new arrays each time
         let kvecs = match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
@@ -87,9 +87,9 @@ impl Domain {
         let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
         let ksq = (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
-            .into_shape(self.mesh.kmesh())?;
+            .into_shape(self.mesh.kmesh())
+            .unwrap();
         self.ksq.assign(&ksq);
-        Ok(())
     }
 }
 
