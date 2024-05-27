@@ -1,0 +1,9 @@
+[package]
+name = "pyfts"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sean Friedowitz"]
+readme = "README.md"
+
+[dependencies.fts]
+path = "../core"

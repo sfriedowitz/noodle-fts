@@ -1,0 +1,11 @@
+{
+    "python.analysis.importFormat": "absolute",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "never",
+            "source.organizeImports.ruff": "explicit"
+        }
+    },
+}

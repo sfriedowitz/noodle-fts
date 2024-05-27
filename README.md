@@ -1,6 +1,10 @@
-# rfts
+# FTS
 
-Polymer field-theoretic simulations in Rust.
+Polymer field-theoretic simulations in Rust, with bindings in Python.
+
+## Core
+
+## Python
 
 ## References
 

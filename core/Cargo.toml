@@ -1,0 +1,26 @@
+[package]
+name = "fts"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sean Friedowitz"]
+readme = "README.md"
+
+[lib]
+name = "fts"
+path = "src/lib.rs"
+bench = false
+
+[features]
+"openblas" = ["ndarray-linalg/openblas-system"]
+"default" = ["openblas"]
+
+[dependencies]
+num = "0.4.2"
+enum_dispatch = "0.3.13"
+float-cmp = "0.9.0"
+itertools = "0.13.0"
+ndrustfft = { version = "0.4.4", features = ["parallel"] }
+ndarray = { version = "0.15.6", features = ["rayon"] }
+ndarray-linalg = "0.16.0"
+ndarray-rand = "0.14.0"
+thiserror = "1.0.61"
