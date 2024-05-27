@@ -1,10 +1,13 @@
+use itertools::Itertools;
 use ndarray::Zip;
+use ndarray_rand::{rand_distr::Normal, RandomExt};
 
 use super::Interaction;
 use crate::{
     chem::{Monomer, Species, SpeciesDescription},
     domain::Domain,
     solvers::{SolverOps, SpeciesSolver},
+    system::SystemError,
     RField, Result,
 };
 
@@ -178,6 +181,52 @@ impl SystemBuilder {
     }
 
     pub fn build(self) -> Result<System> {
-        todo!();
+        // Initial state
+        let domain = self.domain.ok_or(SystemError::MissingDomain)?;
+        let interaction = self.interaction.ok_or(SystemError::MissingDomain)?;
+
+        if self.species.is_empty() {
+            return Err(Box::new(SystemError::MissingSpecies));
+        }
+
+        let monomers: Vec<Monomer> = self
+            .species
+            .iter()
+            .flat_map(|s| s.monomers())
+            .unique_by(|m| m.id)
+            .sorted_by(|a, b| b.id.cmp(&a.id))
+            .collect();
+
+        for (idx, m) in monomers.iter().enumerate() {
+            if m.id != idx {
+                return Err(Box::new(SystemError::MonomerIDs));
+            }
+        }
+
+        let solvers = self
+            .species
+            .into_iter()
+            .map(|species| SpeciesSolver::new(domain.mesh(), species))
+            .collect();
+
+        let mut fields = vec![];
+        let mut density = vec![];
+        let mut residuals = vec![];
+        for _ in 0..monomers.len() {
+            let mesh = domain.mesh();
+            fields.push(RField::random(mesh, Normal::new(0.0, 0.1)?));
+            density.push(RField::zeros(mesh));
+            residuals.push(RField::zeros(mesh));
+        }
+
+        Ok(System {
+            domain,
+            interaction,
+            monomers,
+            solvers,
+            fields,
+            density,
+            residuals,
+        })
     }
 }

@@ -137,8 +137,8 @@ mod tests {
         let fields = vec![field];
 
         let monomer = Monomer::new(0, 1.0);
-        let block = Block::new(monomer, n / 2, b);
-        let polymer = Polymer::new(vec![block, block], contour_steps, 1.0);
+        let block = Block::new(monomer, n, b);
+        let polymer = Polymer::new(vec![block], contour_steps, 1.0);
 
         let mesh = Mesh::One(nx);
         let cell = UnitCell::lamellar(length).unwrap();
