@@ -1,7 +1,7 @@
 use ndarray::Zip;
 
 use super::FieldUpdater;
-use crate::{system::System, RField};
+use crate::{system::System, RField, Result};
 
 pub struct EulerUpdater {
     delta: f64,
@@ -18,31 +18,39 @@ impl EulerUpdater {
 }
 
 impl FieldUpdater for EulerUpdater {
-    fn step(&mut self, system: &mut System) {
-        // 1) Predict
-        for ((field, residual), temp) in system.iter_updater().zip(&mut self.fields_temp) {
-            Zip::from(field)
-                .and(residual)
-                .and(temp)
-                .for_each(|w, r, t| {
-                    *w += self.delta * r;
-                    *t = *w + 0.5 * self.delta * r;
-                })
-        }
+    fn step(&mut self, system: &mut System) -> Result<()> {
+        // // 1) Predict
+        // for ((field, residual), temp) in system.iter_updater().zip(&mut self.fields_temp) {
+        //     Zip::from(field)
+        //         .and(residual)
+        //         .and(temp)
+        //         .for_each(|w, r, t| {
+        //             *w += self.delta * r;
+        //             *t = *w + 0.5 * self.delta * r;
+        //         })
+        // }
 
         // 2) Evaluate
-        system.update();
+        system.update()?;
 
-        // 3) Correct
-        for (residual, temp) in system.residuals().iter().zip(&mut self.fields_temp) {
-            Zip::from(residual).and(temp).for_each(|r, t| {
-                *t += 0.5 * self.delta * r;
+        for (field, residual) in system.iter_updater() {
+            Zip::from(field).and(residual).for_each(|w, r| {
+                *w += self.delta * r;
             })
         }
-        system.assign_fields(&self.fields_temp).unwrap();
 
-        // 4) Evaluate
-        system.update();
+        // // 3) Correct
+        // for (residual, temp) in system.residuals().iter().zip(&mut self.fields_temp) {
+        //     Zip::from(residual).and(temp).for_each(|r, t| {
+        //         *t += 0.5 * self.delta * r;
+        //     })
+        // }
+        // system.assign_fields(&self.fields_temp).unwrap();
+
+        // // 4) Evaluate
+        // system.update();
+
+        Ok(())
     }
 }
 
@@ -74,7 +82,7 @@ mod tests {
         let species: Vec<Species> = vec![polymer.into()];
 
         let mut itx = Interaction::new(2);
-        itx.set_chi(0, 1, 0.0);
+        itx.set_chi(0, 1, 0.12);
 
         // When: System initialized with zero fields (density is equal to bulk values)
         let mut system = System::new(domain, itx, species).unwrap();
@@ -84,11 +92,11 @@ mod tests {
         let mut rng = rand::thread_rng();
         system.sample_fields(&distr, &mut rng);
 
-        for _ in 0..100 {
-            updater.step(&mut system);
+        for _ in 0..250 {
+            updater.step(&mut system).unwrap();
             dbg!(system.free_energy());
         }
 
-        dbg!(system.fields());
+        dbg!(system.free_energy_bulk());
     }
 }

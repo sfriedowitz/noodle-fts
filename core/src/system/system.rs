@@ -7,7 +7,6 @@ use crate::{
     chem::{Monomer, Species, SpeciesDescription},
     domain::Domain,
     solvers::{SolverOps, SpeciesSolver},
-    system::SystemError,
     RField, Result,
 };
 
@@ -57,20 +56,20 @@ impl System {
 
     fn validate_species(species: &[Species]) -> Result<()> {
         if species.is_empty() {
-            return Err(Box::new(SystemError::EmptySpecies));
+            return Err("system must contain at least one species".into());
         }
         Ok(())
     }
 
     fn validate_monomers(interaction: &Interaction, monomers: &[Monomer]) -> Result<()> {
         if interaction.nmonomer() != monomers.len() {
-            return Err(Box::new(SystemError::NumMonomers));
+            return Err("interaction contains wrong number of monomers".into());
         }
 
         let monomer_ids: Vec<usize> = monomers.iter().map(|m| m.id).collect();
         for (idx, monomer_id) in monomer_ids.iter().copied().enumerate() {
             if monomer_id != idx {
-                return Err(Box::new(SystemError::NonConsecutiveIDs(monomer_ids)));
+                return Err(format!("monomer IDs must be consecutive: {:?}", monomer_ids).into());
             }
         }
 
@@ -119,9 +118,9 @@ impl System {
         self.fields.iter_mut().zip(&self.residuals)
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self) -> Result<()> {
         // Update ksq grid
-        self.domain.update_ksq();
+        self.domain.update_ksq()?;
 
         // Reset density grids
         for rho in self.density.iter_mut() {
@@ -140,6 +139,8 @@ impl System {
 
         // Update residuals
         self.update_residuals();
+
+        Ok(())
     }
 
     fn update_residuals(&mut self) {
@@ -150,24 +151,24 @@ impl System {
 
         // Add gradient of interaction
         self.interaction
-            .gradients(&self.density, &mut self.residuals);
+            .add_gradients(&self.density, &mut self.residuals);
 
         // Initial residual: potential - actual fields
         for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter()) {
             Zip::from(residual).and(field).for_each(|r, w| *r = *r - w);
         }
 
-        // Residuals for monomers [1, nmonomer) are differences from monomer 0
-        let (residual_zero, residual_others) = self.residuals.split_at_mut(1);
-        for other in residual_others.iter_mut() {
-            *other -= &residual_zero[0];
-        }
+        // // Residuals for monomers [1, nmonomer) are differences from monomer 0
+        // let (residual_zero, residual_others) = self.residuals.split_at_mut(1);
+        // for other in residual_others.iter_mut() {
+        //     *other -= &residual_zero[0];
+        // }
 
-        // Residual for monomer 0 imposes incompressibility: sum(density) - 1.0
-        residual_zero[0].fill(-1.0);
-        for density in self.density.iter() {
-            residual_zero[0] += density;
-        }
+        // // Residual for monomer 0 imposes incompressibility: sum(density) - 1.0
+        // residual_zero[0].fill(-1.0);
+        // for density in self.density.iter() {
+        //     residual_zero[0] += density;
+        // }
 
         // Mean-subtract fields and residuals (only closed ensemble)
         for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter_mut()) {
@@ -178,9 +179,19 @@ impl System {
 
     pub fn assign_fields(&mut self, fields: &[RField]) -> Result<()> {
         if fields.len() != self.nmonomer() {
-            return Err(Box::new(SystemError::NumMonomers));
+            return Err("number of fields != number of monomers".into());
         }
         for (current, new) in self.fields.iter_mut().zip(fields.iter()) {
+            current.assign(&new);
+        }
+        Ok(())
+    }
+
+    pub fn assign_density(&mut self, density: &[RField]) -> Result<()> {
+        if density.len() != self.nmonomer() {
+            return Err("number of density fields != number of monomers".into());
+        }
+        for (current, new) in self.density.iter_mut().zip(density.iter()) {
             current.assign(&new);
         }
         Ok(())
@@ -200,17 +211,8 @@ impl System {
         for field in self.fields.iter_mut() {
             field.fill(0.0);
         }
-        self.interaction.gradients(&self.density, &mut self.fields);
-    }
-
-    pub fn assign_density(&mut self, density: &[RField]) -> Result<()> {
-        if density.len() != self.nmonomer() {
-            return Err(Box::new(SystemError::NumMonomers));
-        }
-        for (current, new) in self.density.iter_mut().zip(density.iter()) {
-            current.assign(&new);
-        }
-        Ok(())
+        self.interaction
+            .add_gradients(&self.density, &mut self.fields);
     }
 
     pub fn free_energy(&self) -> f64 {
@@ -293,7 +295,7 @@ mod tests {
 
         // When: System initialized with zero fields (density is equal to bulk values)
         let mut system = System::new(domain, itx, species).unwrap();
-        system.update();
+        system.update().unwrap();
 
         // Then: Free energy should be equal to its bulk value
         let f = system.free_energy();

@@ -144,7 +144,7 @@ mod tests {
         let cell = UnitCell::lamellar(length).unwrap();
 
         let mut domain = Domain::new(mesh, cell).unwrap();
-        domain.update_ksq();
+        domain.update_ksq().unwrap();
 
         let mut solver = PolymerSolver::new(mesh, polymer);
 

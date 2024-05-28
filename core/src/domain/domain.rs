@@ -1,7 +1,7 @@
 use itertools::{iproduct, Itertools};
 use ndarray::{Array2, Axis};
 
-use super::{cell::UnitCell, mesh::Mesh, DomainError};
+use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
     utils::math::{fftfreq, rfftfreq, TWO_PI},
     RField, Result,
@@ -51,7 +51,7 @@ pub struct Domain {
 impl Domain {
     pub fn new(mesh: Mesh, cell: UnitCell) -> Result<Self> {
         if mesh.ndim() != cell.ndim() {
-            return Err(Box::new(DomainError::DimensionMismatch));
+            return Err("mesh dimension != cell dimension".into());
         }
         let ksq = RField::zeros(mesh.kmesh());
         Ok(Self { mesh, cell, ksq })
@@ -77,8 +77,7 @@ impl Domain {
         &self.ksq
     }
 
-    pub fn update_ksq(&mut self) {
-        // TODO: Figure out how to do this without allocating new arrays each time
+    pub fn update_ksq(&mut self) -> Result<()> {
         let kvecs = match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
             Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),
@@ -87,9 +86,9 @@ impl Domain {
         let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
         let ksq = (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
-            .into_shape(self.mesh.kmesh())
-            .unwrap();
+            .into_shape(self.mesh.kmesh())?;
         self.ksq.assign(&ksq);
+        Ok(())
     }
 }
 
