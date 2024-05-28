@@ -25,38 +25,38 @@ impl Interaction {
         }
     }
 
-    pub fn energy(&self, density: &[RField]) -> f64 {
+    pub fn energy(&self, concentrations: &[RField]) -> f64 {
         let mut energy = 0.0;
         for (i, j) in self.iter_pairs() {
-            let rho_i = &density[i];
-            let rho_j = &density[j];
+            let conc_i = &concentrations[i];
+            let conc_j = &concentrations[j];
             let chi_ij = self.chi[[i, j]];
-            Zip::from(rho_i)
-                .and(rho_j)
-                .for_each(|ri, rj| energy += 0.5 * chi_ij * ri * rj);
+            Zip::from(conc_i)
+                .and(conc_j)
+                .for_each(|ci, cj| energy += 0.5 * chi_ij * ci * cj);
         }
-        energy / density[0].len() as f64
+        energy / concentrations[0].len() as f64
     }
 
-    pub fn energy_bulk(&self, density: &[f64]) -> f64 {
+    pub fn energy_bulk(&self, concentrations: &[f64]) -> f64 {
         let mut energy = 0.0;
         for (i, j) in self.iter_pairs() {
-            let rho_i = &density[i];
-            let rho_j = &density[j];
+            let conc_i = &concentrations[i];
+            let conc_j = &concentrations[j];
             let chi_ij = self.chi[[i, j]];
-            energy += 0.5 * chi_ij * rho_i * rho_j;
+            energy += 0.5 * chi_ij * conc_i * conc_j;
         }
         energy
     }
 
-    pub fn add_gradients(&self, density: &[RField], fields: &mut [RField]) {
+    pub fn add_gradients(&self, concentrations: &[RField], fields: &mut [RField]) {
         for (i, j) in self.iter_pairs() {
             let omega_i = &mut fields[i];
-            let rho_j = &density[j];
+            let conc_j = &concentrations[j];
             let chi_ij = self.chi[[i, j]];
             Zip::from(omega_i)
-                .and(rho_j)
-                .for_each(|wi, rj| *wi += chi_ij * rj);
+                .and(conc_j)
+                .for_each(|wi, cj| *wi += chi_ij * cj);
         }
     }
 
@@ -96,10 +96,10 @@ mod tests {
         itx.set_chi(0, 1, 2.0);
 
         let mesh = Mesh::One(10);
-        let rho_0 = RField::from_elem(mesh, 0.75);
-        let rho_1 = RField::from_elem(mesh, 0.25);
-        let density = vec![rho_0, rho_1];
-        let energy = itx.energy(&density);
+        let conc_0 = RField::from_elem(mesh, 0.75);
+        let conc_1 = RField::from_elem(mesh, 0.25);
+        let concentrations = vec![conc_0, conc_1];
+        let energy = itx.energy(&concentrations);
 
         // 2 * 0.75 * 0.25 = 0.375
         assert_eq!(energy, 0.375)
@@ -110,8 +110,8 @@ mod tests {
         let mut itx = Interaction::new(2);
         itx.set_chi(0, 1, 2.0);
 
-        let density = vec![0.5, 0.5];
-        let energy = itx.energy_bulk(&density);
+        let concentrations = vec![0.5, 0.5];
+        let energy = itx.energy_bulk(&concentrations);
 
         // 2 * 0.5 * 0.5 = 0.5
         assert_eq!(energy, 0.5)

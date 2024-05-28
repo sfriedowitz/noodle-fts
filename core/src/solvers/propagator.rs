@@ -18,16 +18,16 @@ pub enum StepMethod {
 pub struct PropagatorStep {
     fft: FFT,
     // Operator arrays
-    lw_full: RField,
-    lw_half: RField,
-    lk_full: CField,
-    lk_half: CField,
+    lw1: RField,
+    lw2: RField,
+    lk1: CField,
+    lk2: CField,
     // Ouptut arrays
-    q_full: RField,
-    q_double_half: RField,
+    q1: RField,
+    q2: RField,
     // Work arrays
-    work_real: RField,
-    work_complex: CField,
+    qr: RField,
+    qk: CField,
 }
 
 impl PropagatorStep {
@@ -35,14 +35,14 @@ impl PropagatorStep {
         let kmesh = mesh.kmesh();
         Self {
             fft: FFT::new(mesh),
-            lw_full: RField::zeros(mesh),
-            lw_half: RField::zeros(mesh),
-            lk_full: CField::zeros(kmesh),
-            lk_half: CField::zeros(kmesh),
-            q_full: RField::zeros(mesh),
-            q_double_half: RField::zeros(mesh),
-            work_real: RField::zeros(mesh),
-            work_complex: CField::zeros(kmesh),
+            lw1: RField::zeros(mesh),
+            lw2: RField::zeros(mesh),
+            lk1: CField::zeros(kmesh),
+            lk2: CField::zeros(kmesh),
+            q1: RField::zeros(mesh),
+            q2: RField::zeros(mesh),
+            qr: RField::zeros(mesh),
+            qk: CField::zeros(kmesh),
         }
     }
 
@@ -60,8 +60,8 @@ impl PropagatorStep {
         // Update w-operators:
         // Full = exp(-w * size * ds / 2)
         // Half = exp(-w * size * (ds / 2) / 2)
-        Zip::from(&mut self.lw_full)
-            .and(&mut self.lw_half)
+        Zip::from(&mut self.lw1)
+            .and(&mut self.lw2)
             .and(field)
             .for_each(|full, half, w| {
                 *full = (-lw_coeff * monomer_size * w).exp();
@@ -71,8 +71,8 @@ impl PropagatorStep {
         // Update k-operators:
         // Full = exp(-k^2 * b^2 * ds / 6)
         // Half = exp(-k^2 * b^2 * (ds / 2) / 6)
-        Zip::from(&mut self.lk_full)
-            .and(&mut self.lk_half)
+        Zip::from(&mut self.lk1)
+            .and(&mut self.lk2)
             .and(ksq)
             .for_each(|full, half, ksq| {
                 let ksq_complex: Complex64 = ksq.into();
@@ -84,68 +84,68 @@ impl PropagatorStep {
     pub fn apply(&mut self, q_in: &RField, q_out: &mut RField, method: StepMethod) {
         match method {
             StepMethod::RK2 => {
-                // Full step to populate q_full
+                // Full step to populate q1
                 self.step_full(q_in);
                 // Copy into output array
-                q_out.assign(&self.q_full)
+                q_out.assign(&self.q1)
             }
             StepMethod::RQM4 => {
-                // Full step and double-half step to populate q_full and q_double_half
+                // Full step and double-half step to populate q1 and q2
                 self.step_full(q_in);
                 self.step_double_half(q_in);
                 // Richardson extrapolation of the results
                 Zip::from(q_out)
-                    .and(&self.q_full)
-                    .and(&self.q_double_half)
-                    .for_each(|output, qf, qdh| *output = (4.0 * qdh - qf) / 3.0);
+                    .and(&self.q1)
+                    .and(&self.q2)
+                    .for_each(|output, full, half| *output = (4.0 * half - full) / 3.0);
             }
         }
     }
 
     fn step_full(&mut self, q_in: &RField) {
-        // Apply lw_full to q_in, store in work_real
-        Self::multiply_operator_into(&self.lw_full, q_in, &mut self.work_real);
+        // Apply lw1 to q_in, store in qr
+        Self::multiply_operator_into(&self.lw1, q_in, &mut self.qr);
 
-        // Forward FFT into work_complex
-        self.fft.forward(&self.work_real, &mut self.work_complex);
+        // Forward FFT into qk
+        self.fft.forward(&self.qr, &mut self.qk);
 
-        // Apply lk_full to work_complex
-        self.work_complex *= &self.lk_full;
+        // Apply lk1 to qk
+        self.qk *= &self.lk1;
 
-        // Inverse FFT into work_real
-        self.fft.inverse(&self.work_complex, &mut self.work_real);
+        // Inverse FFT into qr
+        self.fft.inverse(&self.qk, &mut self.qr);
 
-        // Apply lw_full operator to work_real, store in q_full
-        Self::multiply_operator_into(&self.lw_full, &self.work_real, &mut self.q_full);
+        // Apply lw1 operator to qr, store in q1
+        Self::multiply_operator_into(&self.lw1, &self.qr, &mut self.q1);
     }
 
     fn step_double_half(&mut self, q_in: &RField) {
-        // Apply lw_half to q_in, store in work_real
-        Self::multiply_operator_into(&self.lw_half, q_in, &mut self.work_real);
+        // Apply lw2 to q_in, store in qr
+        Self::multiply_operator_into(&self.lw2, q_in, &mut self.qr);
 
-        // Forward FFT into work_complex
-        self.fft.forward(&self.work_real, &mut self.work_complex);
+        // Forward FFT into qk
+        self.fft.forward(&self.qr, &mut self.qk);
 
-        // Apply lk_half to work_complex
-        self.work_complex *= &self.lk_half;
+        // Apply lk2 to qk
+        self.qk *= &self.lk2;
 
-        // Inverse FFT into work_real
-        self.fft.inverse(&self.work_complex, &mut self.work_real);
+        // Inverse FFT into qr
+        self.fft.inverse(&self.qk, &mut self.qr);
 
-        // Apply lw_full to work_real
-        self.work_real *= &self.lw_full;
+        // Apply lw1 to qr
+        self.qr *= &self.lw1;
 
-        // Forward FFT into work_complex
-        self.fft.forward(&self.work_real, &mut self.work_complex);
+        // Forward FFT into qk
+        self.fft.forward(&self.qr, &mut self.qk);
 
-        // Apply lk_half to work_complex
-        self.work_complex *= &self.lk_half;
+        // Apply lk2 to qk
+        self.qk *= &self.lk2;
 
-        // Inverse FFT into work_real
-        self.fft.inverse(&self.work_complex, &mut self.work_real);
+        // Inverse FFT into qr
+        self.fft.inverse(&self.qk, &mut self.qr);
 
-        // Apply lw_half operator to work_real, store in q_double_half
-        Self::multiply_operator_into(&self.lw_half, &self.work_real, &mut self.q_double_half);
+        // Apply lk2 operator to qr, store in q2
+        Self::multiply_operator_into(&self.lw2, &self.qr, &mut self.q2);
     }
 
     fn multiply_operator_into<'a, T>(

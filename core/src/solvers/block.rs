@@ -16,7 +16,7 @@ pub struct BlockSolver {
     step: PropagatorStep,
     forward: Propagator,
     reverse: Propagator,
-    density: RField,
+    concentration: RField,
     ds: f64,
 }
 
@@ -25,14 +25,14 @@ impl BlockSolver {
         let step = PropagatorStep::new(mesh);
         let forward = Propagator::new(mesh, ns);
         let reverse = Propagator::new(mesh, ns);
-        let density = RField::zeros(mesh);
+        let concentration = RField::zeros(mesh);
         Self {
             mesh,
             block,
             step,
             forward,
             reverse,
-            density,
+            concentration,
             ds,
         }
     }
@@ -45,8 +45,8 @@ impl BlockSolver {
         self.block
     }
 
-    pub fn density(&self) -> &RField {
-        &self.density
+    pub fn concentration(&self) -> &RField {
+        &self.concentration
     }
 
     pub fn forward(&self) -> &Propagator {
@@ -84,10 +84,10 @@ impl BlockSolver {
         );
     }
 
-    pub fn update_density(&mut self, prefactor: f64) {
+    pub fn update_concentration(&mut self, prefactor: f64) {
         let qf = &self.forward;
         let qr = &self.reverse;
-        self.density.fill(0.0);
+        self.concentration.fill(0.0);
 
         // Simpson's rule integration of qf * qr
         let ns = self.ns();
@@ -104,13 +104,13 @@ impl BlockSolver {
             };
             // We integrate at contour position `s` for both forward and reverse
             // because index 0 on the reverse propagator is for position N on the chain
-            Zip::from(&mut self.density)
+            Zip::from(&mut self.concentration)
                 .and(qf.position(s))
                 .and(qr.position(s))
-                .for_each(|rho, x, y| *rho += coef * x * y);
+                .for_each(|c, x, y| *c += coef * x * y);
         }
 
         // Normalize the integral
-        self.density *= prefactor * (self.ds / 3.0);
+        self.concentration *= prefactor * (self.ds / 3.0);
     }
 }

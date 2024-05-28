@@ -11,14 +11,14 @@ use crate::{
 pub struct PolymerSolver {
     species: Polymer,
     block_solvers: Vec<BlockSolver>,
-    density: HashMap<usize, RField>,
+    concentration: HashMap<usize, RField>,
     partition: f64,
 }
 
 impl PolymerSolver {
     pub fn new(mesh: Mesh, species: Polymer) -> Self {
         let block_solvers = Self::build_block_solvers(mesh, &species);
-        let density = HashMap::from_iter(
+        let concentration = HashMap::from_iter(
             species
                 .monomers()
                 .iter()
@@ -27,7 +27,7 @@ impl PolymerSolver {
         Self {
             species,
             block_solvers,
-            density,
+            concentration,
             partition: 1.0,
         }
     }
@@ -59,8 +59,8 @@ impl SolverOps for PolymerSolver {
         self.partition
     }
 
-    fn density(&self) -> &HashMap<usize, RField> {
-        &self.density
+    fn concentration(&self) -> &HashMap<usize, RField> {
+        &self.concentration
     }
 
     fn solve(&mut self, domain: &Domain, fields: &[RField]) {
@@ -89,18 +89,18 @@ impl SolverOps for PolymerSolver {
         // Compute new partition function
         self.partition = self.block_solvers[0].compute_partition();
 
-        // Update solver density
+        // Update solver concentration
         let prefactor = self.species.phi() / self.species.size() / self.partition;
         for solver in self.block_solvers.iter_mut() {
-            solver.update_density(prefactor);
+            solver.update_concentration(prefactor);
         }
 
-        // Accumulate per-block density in solver state
-        for (id, density) in self.density.iter_mut() {
-            density.fill(0.0);
+        // Accumulate per-block concentration in solver state
+        for (id, concentration) in self.concentration.iter_mut() {
+            concentration.fill(0.0);
             for solver in self.block_solvers.iter() {
                 if solver.block().monomer.id == *id {
-                    *density += solver.density();
+                    *concentration += solver.concentration();
                 }
             }
         }
@@ -153,7 +153,7 @@ mod tests {
         let elapsed = now.elapsed();
 
         dbg!(x.as_slice().unwrap());
-        dbg!(solver.density().get(&0).unwrap().as_slice().unwrap());
+        dbg!(solver.concentration().get(&0).unwrap().as_slice().unwrap());
         dbg!(elapsed);
     }
 }

@@ -15,7 +15,7 @@ pub trait SolverOps {
 
     fn partition(&self) -> f64;
 
-    fn density(&self) -> &HashMap<usize, RField>;
+    fn concentration(&self) -> &HashMap<usize, RField>;
 
     fn solve(&mut self, domain: &Domain, fields: &[RField]);
 }

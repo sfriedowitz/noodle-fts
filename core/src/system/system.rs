@@ -17,7 +17,7 @@ pub struct System {
     monomers: Vec<Monomer>,
     solvers: Vec<SpeciesSolver>,
     fields: Vec<RField>,
-    density: Vec<RField>,
+    concentrations: Vec<RField>,
     residuals: Vec<RField>,
 }
 
@@ -40,7 +40,7 @@ impl System {
             .collect();
 
         let fields = vec![RField::zeros(domain.mesh()); monomers.len()];
-        let density = vec![RField::zeros(domain.mesh()); monomers.len()];
+        let concentrations = vec![RField::zeros(domain.mesh()); monomers.len()];
         let residuals = vec![RField::zeros(domain.mesh()); monomers.len()];
 
         Ok(System {
@@ -49,7 +49,7 @@ impl System {
             monomers,
             solvers,
             fields,
-            density,
+            concentrations,
             residuals,
         })
     }
@@ -106,8 +106,8 @@ impl System {
         &self.fields
     }
 
-    pub fn density(&self) -> &[RField] {
-        &self.density
+    pub fn concenrations(&self) -> &[RField] {
+        &self.concentrations
     }
 
     pub fn residuals(&self) -> &[RField] {
@@ -122,18 +122,18 @@ impl System {
         // Update ksq grid
         self.domain.update_ksq()?;
 
-        // Reset density grids
-        for rho in self.density.iter_mut() {
-            rho.fill(0.0);
+        // Reset concentration fields
+        for conc in self.concentrations.iter_mut() {
+            conc.fill(0.0);
         }
 
         for solver in self.solvers.iter_mut() {
             // Solve the species given current fields/domain
             solver.solve(&self.domain, &self.fields);
 
-            // Accumulate solver density into system density
-            for (id, rho) in solver.density().iter() {
-                self.density[*id] += rho;
+            // Accumulate solver concentrations into system fields
+            for (id, conc) in solver.concentration().iter() {
+                self.concentrations[*id] += conc;
             }
         }
 
@@ -151,7 +151,7 @@ impl System {
 
         // Add gradient of interaction
         self.interaction
-            .add_gradients(&self.density, &mut self.residuals);
+            .add_gradients(&self.concentrations, &mut self.residuals);
 
         // Initial residual: potential - actual fields
         for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter()) {
@@ -164,10 +164,10 @@ impl System {
         //     *other -= &residual_zero[0];
         // }
 
-        // // Residual for monomer 0 imposes incompressibility: sum(density) - 1.0
+        // // Residual for monomer 0 imposes incompressibility: sum(concentrations) - 1.0
         // residual_zero[0].fill(-1.0);
-        // for density in self.density.iter() {
-        //     residual_zero[0] += density;
+        // for conc in self.concentrations.iter() {
+        //     residual_zero[0] += conc;
         // }
 
         // Mean-subtract fields and residuals (only closed ensemble)
@@ -187,11 +187,11 @@ impl System {
         Ok(())
     }
 
-    pub fn assign_density(&mut self, density: &[RField]) -> Result<()> {
-        if density.len() != self.nmonomer() {
-            return Err("number of density fields != number of monomers".into());
+    pub fn assign_concentration(&mut self, concentrations: &[RField]) -> Result<()> {
+        if concentrations.len() != self.nmonomer() {
+            return Err("number of concentration fields != number of monomers".into());
         }
-        for (current, new) in self.density.iter_mut().zip(density.iter()) {
+        for (current, new) in self.concentrations.iter_mut().zip(concentrations.iter()) {
             current.assign(&new);
         }
         Ok(())
@@ -212,7 +212,7 @@ impl System {
             field.fill(0.0);
         }
         self.interaction
-            .add_gradients(&self.density, &mut self.fields);
+            .add_gradients(&self.concentrations, &mut self.fields);
     }
 
     pub fn free_energy(&self) -> f64 {
@@ -231,17 +231,17 @@ impl System {
         let f_exchange: f64 = self
             .fields
             .iter()
-            .zip(self.density.iter())
-            .map(|(field, density)| {
+            .zip(self.concentrations.iter())
+            .map(|(field, conc)| {
                 let exchange_sum = Zip::from(field)
-                    .and(density)
-                    .fold(0.0, |acc, w, d| acc + w * d);
+                    .and(conc)
+                    .fold(0.0, |acc, w, c| acc + w * c);
                 -1.0 * exchange_sum / self.domain.mesh_size() as f64
             })
             .sum();
 
         // Interaction
-        let f_inter = self.interaction.energy(&self.density);
+        let f_inter = self.interaction.energy(&self.concentrations);
 
         f_trans + f_exchange + f_inter
     }
@@ -293,7 +293,7 @@ mod tests {
         let mut itx = Interaction::new(2);
         itx.set_chi(0, 1, 0.25);
 
-        // When: System initialized with zero fields (density is equal to bulk values)
+        // When: System initialized with zero fields (concentration is equal to bulk values)
         let mut system = System::new(domain, itx, species).unwrap();
         system.update().unwrap();
 
