@@ -49,7 +49,7 @@ impl Interaction {
         energy
     }
 
-    pub fn add_potentials(&self, density: &[RField], fields: &mut [RField]) {
+    pub fn gradients(&self, density: &[RField], fields: &mut [RField]) {
         for (i, j) in self.iter_pairs() {
             let omega_i = &mut fields[i];
             let rho_j = &density[j];

@@ -25,3 +25,4 @@ ndarray = { version = "0.15.6", features = ["rayon"] }
 ndarray-linalg = "0.16.0"
 ndarray-rand = "0.14.0"
 thiserror = "1.0.61"
+rand = "0.8.5"

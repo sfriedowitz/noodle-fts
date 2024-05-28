@@ -6,8 +6,10 @@ pub use system::System;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SystemError {
-    #[error("number of fields != number of monomers")]
-    NumFields,
-    #[error("validation error: {0}")]
-    Validation(String),
+    #[error("system must contain at least one species")]
+    EmptySpecies,
+    #[error("number of monomers does not match system")]
+    NumMonomers,
+    #[error("non-consecutive monomer IDs: {0:?}")]
+    NonConsecutiveIDs(Vec<usize>),
 }
