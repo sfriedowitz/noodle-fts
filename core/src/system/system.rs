@@ -16,11 +16,13 @@ pub struct System {
     interaction: Interaction,
     monomers: Vec<Monomer>,
     solvers: Vec<SpeciesSolver>,
+    // State
     fields: Vec<RField>,
     concentrations: Vec<RField>,
     residuals: Vec<RField>,
     potentials: Vec<RField>,
     incompressibility: RField,
+    total_concentration: RField,
 }
 
 impl System {
@@ -41,11 +43,13 @@ impl System {
             .map(|species| SpeciesSolver::new(domain.mesh(), species))
             .collect();
 
+        let mesh = domain.mesh();
         let fields = vec![RField::zeros(domain.mesh()); monomers.len()];
         let concentrations = vec![RField::zeros(domain.mesh()); monomers.len()];
         let residuals = vec![RField::zeros(domain.mesh()); monomers.len()];
         let potentials = vec![RField::zeros(domain.mesh()); monomers.len()];
-        let incompressibility = RField::zeros(domain.mesh());
+        let incompressibility = RField::zeros(mesh);
+        let total_concentration = RField::zeros(mesh);
 
         Ok(System {
             domain,
@@ -57,6 +61,7 @@ impl System {
             residuals,
             potentials,
             incompressibility,
+            total_concentration,
         })
     }
 
@@ -69,7 +74,7 @@ impl System {
 
     fn validate_monomers(interaction: &Interaction, monomers: &[Monomer]) -> Result<()> {
         if interaction.nmonomer() != monomers.len() {
-            return Err("interaction contains wrong number of monomers".into());
+            return Err("interaction contains incorrect number of monomers".into());
         }
 
         let monomer_ids: Vec<usize> = monomers.iter().map(|m| m.id).collect();
@@ -82,20 +87,20 @@ impl System {
         Ok(())
     }
 
-    pub fn nspecies(&self) -> usize {
-        self.solvers.len()
-    }
-
-    pub fn species(&self) -> Vec<Species> {
-        self.solvers.iter().map(|s| s.species()).collect()
-    }
-
     pub fn nmonomer(&self) -> usize {
         self.monomers.len()
     }
 
+    pub fn nspecies(&self) -> usize {
+        self.solvers.len()
+    }
+
     pub fn monomers(&self) -> Vec<Monomer> {
         self.monomers.clone()
+    }
+
+    pub fn species(&self) -> Vec<Species> {
+        self.solvers.iter().map(|s| s.species()).collect()
     }
 
     pub fn monomer_fractions(&self) -> Vec<f64> {
@@ -116,91 +121,37 @@ impl System {
         &self.concentrations
     }
 
-    pub fn residuals(&self) -> &[RField] {
-        &self.residuals
+    pub fn total_concentration(&self) -> &RField {
+        &self.total_concentration
     }
 
-    pub fn total_concentration(&self) -> RField {
-        let mut total = RField::zeros(self.domain.mesh());
-        for conc in self.concentrations.iter() {
-            total += conc;
-        }
-        total
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = FieldState<'a>> {
+        izip!(&self.fields, &self.concentrations, &self.residuals)
+            .enumerate()
+            .map(|(id, (field, concentration, residual))| FieldState {
+                id,
+                field,
+                concentration,
+                residual,
+            })
     }
 
-    pub fn iter_updater(&mut self) -> impl Iterator<Item = (&mut RField, &RField)> {
-        self.fields.iter_mut().zip(&self.residuals)
-    }
-
-    pub fn update(&mut self) {
-        self.domain.update_ksq();
-        self.update_concentrations();
-        self.update_potentials();
-        self.update_incompressibility();
-        self.update_residuals();
-    }
-
-    fn update_concentrations(&mut self) {
-        // Reset concentration fields
-        for conc in self.concentrations.iter_mut() {
-            conc.fill(0.0);
-        }
-        // Solve the species given current fields/domain
-        for solver in self.solvers.iter_mut() {
-            solver.solve(&self.domain, &self.fields);
-            for (id, conc) in solver.concentrations().iter() {
-                self.concentrations[*id] += conc;
-            }
-        }
-    }
-
-    fn update_potentials(&mut self) {
-        for potential in self.potentials.iter_mut() {
-            potential.fill(0.0);
-        }
-        self.interaction
-            .add_gradients(&self.concentrations, &mut self.potentials)
-    }
-
-    fn update_incompressibility(&mut self) {
-        // Initial field set to sum(c) - 1.0
-        self.incompressibility.fill(-1.0);
-        for conc in self.concentrations.iter() {
-            self.incompressibility += conc;
-        }
-        // Average (w - p) for all fields
-        for (field, potential) in self.fields.iter().zip(self.potentials.iter()) {
-            Zip::from(&mut self.incompressibility)
-                .and(field)
-                .and(potential)
-                .for_each(|i, w, p| *i += w - p)
-        }
-        self.incompressibility /= self.nmonomer() as f64;
-    }
-
-    fn update_residuals(&mut self) {
-        // Residuals set to r = p + i - w
-        for (residual, field, potential) in
-            izip!(&mut self.residuals, &self.fields, &self.potentials)
-        {
-            Zip::from(residual)
-                .and(field)
-                .and(potential)
-                .and(&self.incompressibility)
-                .for_each(|r, w, p, i| *r = p + i - w)
-        }
-        // Mean-subtract fields and residuals (only closed ensemble)
-        for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter_mut()) {
-            *residual -= residual.mean().expect("residual mean should not be empty");
-            *field -= field.mean().expect("field mean should not be empty");
-        }
+    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = FieldStateMut<'a>> {
+        izip!(&mut self.fields, &self.concentrations, &self.residuals)
+            .enumerate()
+            .map(|(id, (field, concentration, residual))| FieldStateMut {
+                id,
+                field,
+                concentration,
+                residual,
+            })
     }
 
     pub fn assign_fields(&mut self, fields: &[RField]) -> Result<()> {
         if fields.len() != self.nmonomer() {
             return Err("number of fields != number of monomers".into());
         }
-        for (current, new) in self.fields.iter_mut().zip(fields.iter()) {
+        for (current, new) in izip!(&mut self.fields, fields) {
             if new.shape() != current.shape() {
                 return Err("new field shape != current shape".into());
             }
@@ -209,11 +160,11 @@ impl System {
         Ok(())
     }
 
-    pub fn assign_concentration(&mut self, concentrations: &[RField]) -> Result<()> {
+    pub fn assign_concentrations(&mut self, concentrations: &[RField]) -> Result<()> {
         if concentrations.len() != self.nmonomer() {
             return Err("number of concentration fields != number of monomers".into());
         }
-        for (current, new) in self.concentrations.iter_mut().zip(concentrations.iter()) {
+        for (current, new) in izip!(&mut self.concentrations, concentrations) {
             if new.shape() != current.shape() {
                 return Err("new concentration shape != current shape".into());
             }
@@ -240,6 +191,72 @@ impl System {
             .add_gradients(&self.concentrations, &mut self.fields);
     }
 
+    pub fn update(&mut self) {
+        self.domain.update_ksq(); // TODO: Add this to the system state
+        self.update_concentrations();
+        self.update_potentials();
+        self.update_incompressibility();
+        self.update_residuals();
+    }
+
+    fn update_concentrations(&mut self) {
+        // Reset concentration fields
+        self.total_concentration.fill(0.0);
+        for conc in self.concentrations.iter_mut() {
+            conc.fill(0.0);
+        }
+        // Solve the species given current fields/domain
+        for solver in self.solvers.iter_mut() {
+            solver.solve(&self.domain, &self.fields);
+            for (id, conc) in solver.concentrations().iter() {
+                self.concentrations[*id] += conc;
+                self.total_concentration += conc;
+            }
+        }
+    }
+
+    fn update_potentials(&mut self) {
+        for potential in self.potentials.iter_mut() {
+            potential.fill(0.0);
+        }
+        self.interaction
+            .add_gradients(&self.concentrations, &mut self.potentials)
+    }
+
+    fn update_incompressibility(&mut self) {
+        // Initial field set to sum(c) - 1.0
+        Zip::from(&mut self.incompressibility)
+            .and(&self.total_concentration)
+            .for_each(|z, c| *z = c - 1.0);
+
+        // Average (w - p) for all fields
+        for (field, potential) in izip!(&self.fields, &self.potentials) {
+            Zip::from(&mut self.incompressibility)
+                .and(field)
+                .and(potential)
+                .for_each(|z, w, p| *z += w - p)
+        }
+        self.incompressibility /= self.nmonomer() as f64;
+    }
+
+    fn update_residuals(&mut self) {
+        // Residuals set to r = p + i - w
+        for (residual, field, potential) in
+            izip!(&mut self.residuals, &self.fields, &self.potentials)
+        {
+            Zip::from(residual)
+                .and(field)
+                .and(potential)
+                .and(&self.incompressibility)
+                .for_each(|r, w, p, z| *r = p + z - w)
+        }
+        // Mean-subtract fields and residuals (only closed ensemble)
+        for (field, residual) in izip!(&mut self.fields, &mut self.residuals) {
+            *residual -= residual.mean().unwrap();
+            *field -= field.mean().unwrap();
+        }
+    }
+
     pub fn free_energy(&self) -> f64 {
         // Translational
         let f_trans: f64 = self
@@ -253,10 +270,7 @@ impl System {
             .sum();
 
         // Exchange
-        let f_exchange: f64 = self
-            .fields
-            .iter()
-            .zip(self.concentrations.iter())
+        let f_exchange: f64 = izip!(&self.fields, &self.concentrations)
             .map(|(field, conc)| {
                 let exchange_sum = Zip::from(field)
                     .and(conc)
@@ -288,6 +302,22 @@ impl System {
 
         f_trans + f_inter
     }
+}
+
+#[derive(Debug)]
+pub struct FieldState<'a> {
+    pub id: usize,
+    pub field: &'a RField,
+    pub concentration: &'a RField,
+    pub residual: &'a RField,
+}
+
+#[derive(Debug)]
+pub struct FieldStateMut<'a> {
+    pub id: usize,
+    pub field: &'a mut RField,
+    pub concentration: &'a RField,
+    pub residual: &'a RField,
 }
 
 #[cfg(test)]

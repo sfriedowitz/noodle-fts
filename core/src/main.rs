@@ -18,7 +18,7 @@ fn main() {
     let species: Vec<Species> = vec![polymer.into()];
 
     let mut itx = Interaction::new(2);
-    itx.set_chi(monomer_a.id, monomer_b.id, 0.35);
+    itx.set_chi(monomer_a.id, monomer_b.id, 0.4);
 
     let mut system = System::new(domain, itx, species).unwrap();
 
