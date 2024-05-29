@@ -109,8 +109,6 @@ impl SolverOps for PolymerSolver {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-
     use ndarray::Array1;
 
     use super::*;
@@ -129,6 +127,7 @@ mod tests {
         let length = 10.0 * rg;
         let nx = 64;
 
+        // Test problem from Fig. 3.14, Fredrickson 2005
         let x = Array1::linspace(0.0, length, nx);
         let field = 3.0 * (&x - length / 2.0) / (2.0 * rg);
         let field = field
@@ -147,14 +146,7 @@ mod tests {
         domain.update_ksq();
 
         let mut solver = PolymerSolver::new(mesh, polymer);
-
-        let now = Instant::now();
         solver.solve(&domain, &fields);
-        let elapsed = now.elapsed();
-
-        dbg!(x);
-        dbg!(solver.concentrations().get(&0).unwrap());
-        dbg!(elapsed);
     }
 
     #[test]

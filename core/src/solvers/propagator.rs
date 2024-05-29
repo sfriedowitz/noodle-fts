@@ -178,6 +178,10 @@ impl Propagator {
         self.qfields.len()
     }
 
+    pub fn qfields(&self) -> &[RField] {
+        &self.qfields
+    }
+
     pub fn head(&self) -> &RField {
         &self.qfields[0]
     }
@@ -195,14 +199,6 @@ impl Propagator {
         &mut self.qfields[s]
     }
 
-    pub fn position(&self, s: usize) -> &RField {
-        &self.qfields[s]
-    }
-
-    pub fn position_mut(&mut self, s: usize) -> &mut RField {
-        &mut self.qfields[s]
-    }
-
     pub fn update_head<'a>(&mut self, sources: impl Iterator<Item = &'a RField>) {
         self.head_mut().fill(1.0);
         for source in sources {
@@ -211,11 +207,10 @@ impl Propagator {
     }
 
     pub fn propagate(&mut self, step: &mut PropagatorStep) {
-        // Propagate from 1..ns
         for s in 1..self.ns() {
             let (left, right) = self.qfields.split_at_mut(s);
-            let q_in = left.last().unwrap();
-            let q_out = right.first_mut().unwrap();
+            let q_in = &left[left.len() - 1];
+            let q_out = &mut right[0];
             step.apply(q_in, q_out, StepMethod::RQM4)
         }
     }

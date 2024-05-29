@@ -58,10 +58,12 @@ impl BlockSolver {
     }
 
     pub fn compute_partition(&self) -> f64 {
-        let partition_sum = Zip::from(self.forward.head())
-            .and(self.reverse.tail())
-            .fold(0.0, |acc, h, t| acc + h * t);
+        let partition_sum = Self::propagator_product(self.forward.head(), self.reverse.tail());
         partition_sum / self.mesh.size() as f64
+    }
+
+    fn propagator_product(q1: &RField, q2: &RField) -> f64 {
+        Zip::from(q1).and(q2).fold(0.0, |acc, h, t| acc + h * t)
     }
 
     pub fn solve(&mut self, source: Option<&RField>, direction: PropagatorDirection) {
@@ -85,32 +87,105 @@ impl BlockSolver {
     }
 
     pub fn update_concentration(&mut self, prefactor: f64) {
-        let qf = &self.forward;
-        let qr = &self.reverse;
+        let ns = self.ns();
         self.concentration.fill(0.0);
 
-        // Simpson's rule integration of qf * qr
-        let ns = self.ns();
-        for s in 0..ns {
-            let coef = if s == 0 || s == ns - 1 {
-                // Endpoints
-                1.0
-            } else if s % 2 == 0 {
-                // Even indices
-                2.0
-            } else {
-                // Odd indices
-                4.0
-            };
-            // We integrate at contour position `s` for both forward and reverse
-            // because index 0 on the reverse propagator is for position N on the chain
-            Zip::from(&mut self.concentration)
-                .and(qf.position(s))
-                .and(qr.position(ns - s - 1))
-                .for_each(|c, x, y| *c += coef * x * y);
-        }
+        // Reverse to account for N - s indexing of qfields
+        let forward_iter = self.forward.qfields().iter();
+        let reverse_iter = self.reverse.qfields().iter().rev();
+
+        forward_iter
+            .zip(reverse_iter)
+            .enumerate()
+            .for_each(|(s, (qf, qr))| {
+                let coef = if s == 0 || s == ns - 1 {
+                    // Endpoints
+                    1.0
+                } else if s % 2 == 0 {
+                    // Even indices
+                    2.0
+                } else {
+                    // Odd indices
+                    4.0
+                };
+                Zip::from(&mut self.concentration)
+                    .and(qf)
+                    .and(qr)
+                    .for_each(|c, f, r| *c += coef * f * r);
+            });
 
         // Normalize the integral
         self.concentration *= prefactor * (self.ds / 3.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use float_cmp::assert_approx_eq;
+    use ndarray_rand::{rand_distr::Normal, RandomExt};
+    use rand::{rngs::SmallRng, SeedableRng};
+
+    use super::*;
+    use crate::{
+        chem::Monomer,
+        domain::{Domain, UnitCell},
+    };
+
+    fn get_solver() -> BlockSolver {
+        let mesh = Mesh::One(16);
+        let cell = UnitCell::lamellar(10.0).unwrap();
+
+        let mut domain = Domain::new(mesh, cell).unwrap();
+        domain.update_ksq();
+
+        let mut rng = SmallRng::seed_from_u64(0);
+        let distr = Normal::new(0.0, 0.1).unwrap();
+        let field = RField::random_using(mesh, &distr, &mut rng);
+        let ksq = domain.ksq();
+
+        let block = Block::new(Monomer::new(0, 1.0), 100, 1.0);
+        let mut solver = BlockSolver::new(block, mesh, 10, 0.1);
+        solver.update_step(&vec![field], ksq);
+        solver.solve(None, PropagatorDirection::Forward);
+        solver.solve(None, PropagatorDirection::Reverse);
+
+        solver
+    }
+
+    #[test]
+    fn test_propagator_symmetry() {
+        let solver = get_solver();
+        let qf = solver.forward();
+        let qr = solver.reverse();
+
+        // Heads of both propagators should be equal to 1
+        assert!(qf.head().iter().all(|x| *x == 1.0));
+        assert!(qr.head().iter().all(|x| *x == 1.0));
+
+        // Propagators should be equivalent at all contour points due to symmetry
+        for (f, r) in qf.qfields().iter().zip(qr.qfields().iter()) {
+            assert_eq!(f, r);
+        }
+    }
+
+    #[test]
+    fn test_partition_symmetry() {
+        let solver = get_solver();
+        let qf = solver.forward();
+        let qr = solver.reverse();
+
+        // Partition product should be equivalent at all (s, N-s-1) pairs along the chain
+        let forward_iter = qf.qfields().iter();
+        let reverse_iter = qr.qfields().iter().rev();
+
+        let partition_sums: Vec<f64> = forward_iter
+            .zip(reverse_iter)
+            .map(|(f, r)| BlockSolver::propagator_product(f, r))
+            .collect();
+
+        let first = partition_sums[0];
+        partition_sums
+            .into_iter()
+            .for_each(|elem| assert_approx_eq!(f64, elem, first));
     }
 }
