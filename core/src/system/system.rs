@@ -103,14 +103,12 @@ impl System {
         self.solvers.iter().map(|s| s.species()).collect()
     }
 
-    pub fn monomer_fractions(&self) -> Vec<f64> {
-        let mut fractions = vec![0.0; self.nmonomer()];
-        for m in self.monomers().iter() {
-            for s in self.species().iter() {
-                fractions[m.id] += s.phi() * s.monomer_fraction(m.id);
-            }
-        }
-        fractions
+    pub fn domain(&self) -> &Domain {
+        &self.domain
+    }
+
+    pub fn interaction(&self) -> &Interaction {
+        &self.interaction
     }
 
     pub fn fields(&self) -> &[RField] {
@@ -123,6 +121,16 @@ impl System {
 
     pub fn total_concentration(&self) -> &RField {
         &self.total_concentration
+    }
+
+    pub fn monomer_fractions(&self) -> Vec<f64> {
+        let mut fractions = vec![0.0; self.nmonomer()];
+        for m in self.monomers().iter() {
+            for s in self.species().iter() {
+                fractions[m.id] += s.phi() * s.monomer_fraction(m.id);
+            }
+        }
+        fractions
     }
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = FieldState<'a>> {
@@ -153,7 +161,7 @@ impl System {
         }
         for (current, new) in izip!(&mut self.fields, fields) {
             if new.shape() != current.shape() {
-                return Err("new field shape != current shape".into());
+                return Err("new field shape != system mesh shape".into());
             }
             current.assign(&new);
         }
@@ -166,7 +174,7 @@ impl System {
         }
         for (current, new) in izip!(&mut self.concentrations, concentrations) {
             if new.shape() != current.shape() {
-                return Err("new concentration shape != current shape".into());
+                return Err("new concentration shape != system mesh shape".into());
             }
             current.assign(&new);
         }
@@ -179,7 +187,7 @@ impl System {
         R: Rng,
     {
         for field in self.fields.iter_mut() {
-            field.iter_mut().for_each(|f| *f = distr.sample(rng));
+            field.mapv_inplace(|_| distr.sample(rng));
         }
     }
 
@@ -191,6 +199,13 @@ impl System {
             .add_gradients(&self.concentrations, &mut self.fields);
     }
 
+    /// Update the system state.
+    ///
+    /// This involves:
+    /// - Updating the wave-vectors based on the current cell parameters.
+    /// - Solving the concentrations for all species.
+    /// - Updating the Lagrange multiplier incompressibility field.
+    /// - Updating the system residuals based on the current fields and concentrations.
     pub fn update(&mut self) {
         self.domain.update_ksq(); // TODO: Add this to the system state
         self.update_concentrations();
@@ -225,9 +240,8 @@ impl System {
 
     fn update_incompressibility(&mut self) {
         // Initial field set to sum(c) - 1.0
-        Zip::from(&mut self.incompressibility)
-            .and(&self.total_concentration)
-            .for_each(|z, c| *z = c - 1.0);
+        self.incompressibility.fill(-1.0);
+        self.incompressibility += &self.total_concentration;
 
         // Average (w - p) for all fields
         for (field, potential) in izip!(&self.fields, &self.potentials) {
@@ -236,11 +250,12 @@ impl System {
                 .and(potential)
                 .for_each(|z, w, p| *z += w - p)
         }
+
         self.incompressibility /= self.nmonomer() as f64;
     }
 
     fn update_residuals(&mut self) {
-        // Residuals set to r = p + i - w
+        // Residuals set to r = p + z - w
         for (residual, field, potential) in
             izip!(&mut self.residuals, &self.fields, &self.potentials)
         {
@@ -257,6 +272,7 @@ impl System {
         }
     }
 
+    /// Return the Helmholtz free energy based on the current system state.
     pub fn free_energy(&self) -> f64 {
         // Translational
         let f_trans: f64 = self
@@ -285,6 +301,7 @@ impl System {
         f_trans + f_exchange + f_inter
     }
 
+    /// Return the Helmholtz free energy for the homogenous mixture.
     pub fn free_energy_bulk(&self) -> f64 {
         // Translational
         let f_trans: f64 = self
@@ -301,6 +318,19 @@ impl System {
         let f_inter = self.interaction.energy_bulk(&self.monomer_fractions());
 
         f_trans + f_inter
+    }
+
+    /// Return the weighted error based on the current field residuals.
+    ///
+    /// Reference: https://link.springer.com/article/10.1140/epje/i2009-10534-3
+    pub fn field_error(&self) -> f64 {
+        let mut rsum = 0.0;
+        let mut wsum = 0.0;
+        for state in self.iter() {
+            rsum += state.residual.fold(0.0, |acc, r| acc + r * r);
+            wsum += state.field.fold(0.0, |acc, w| acc + w * w);
+        }
+        (rsum / wsum).sqrt()
     }
 }
 

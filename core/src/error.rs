@@ -7,7 +7,6 @@ pub enum Error {
     // Custom
     #[error("{0}")]
     Generic(String),
-
     // External
     #[error("{0}")]
     Linalg(#[from] ndarray_linalg::error::LinalgError),
