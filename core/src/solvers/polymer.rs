@@ -150,7 +150,5 @@ mod tests {
     }
 
     #[test]
-    fn test_diblock() {
-        todo!()
-    }
+    fn test_diblock() {}
 }

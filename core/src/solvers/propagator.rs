@@ -1,11 +1,9 @@
-use std::ops::Mul;
-
 use ndarray::Zip;
 use num::complex::Complex64;
 
 use crate::{
     domain::{Mesh, FFT},
-    CField, Field, RField,
+    CField, RField,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -148,13 +146,7 @@ impl PropagatorStep {
         Self::multiply_operator_into(&self.lw2, &self.qr, &mut self.q2);
     }
 
-    fn multiply_operator_into<'a, T>(
-        operator: &'a Field<T>,
-        input: &'a Field<T>,
-        output: &mut Field<T>,
-    ) where
-        &'a T: Mul<&'a T, Output = T>,
-    {
+    fn multiply_operator_into(operator: &RField, input: &RField, output: &mut RField) {
         Zip::from(operator)
             .and(input)
             .and(output)
@@ -178,8 +170,9 @@ impl Propagator {
         self.qfields.len()
     }
 
-    pub fn qfields(&self) -> &[RField] {
-        &self.qfields
+    /// Return a `DoubleEndedIterator` over the q-fields of the propagator.
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &RField> {
+        self.qfields.iter()
     }
 
     pub fn head(&self) -> &RField {

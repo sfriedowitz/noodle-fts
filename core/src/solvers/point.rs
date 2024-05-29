@@ -62,3 +62,28 @@ impl SolverOps for PointSolver {
         concentration.mapv_inplace(|conc| prefactor * conc);
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::{chem::Monomer, domain::UnitCell};
+
+    #[test]
+    fn test_zero_field() {
+        let mesh = Mesh::One(16);
+        let cell = UnitCell::lamellar(1.0).unwrap();
+        let domain = Domain::new(mesh, cell).unwrap();
+
+        let phi = 0.235;
+        let point = Point::new(Monomer::new(0, 1.0), phi);
+        let fields = vec![RField::zeros(mesh); 1];
+
+        let mut solver = PointSolver::new(mesh, point);
+        solver.solve(&domain, &fields);
+
+        // Concentration should be the bulk fraction in the absence of a field
+        let conc = solver.concentrations().get(&point.monomer.id).unwrap();
+        assert!(conc.iter().all(|elem| *elem == phi));
+    }
+}

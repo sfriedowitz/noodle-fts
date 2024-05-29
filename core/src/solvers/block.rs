@@ -58,11 +58,11 @@ impl BlockSolver {
     }
 
     pub fn compute_partition(&self) -> f64 {
-        let partition_sum = Self::propagator_product(self.forward.head(), self.reverse.tail());
+        let partition_sum = Self::partition_sum(self.forward.head(), self.reverse.tail());
         partition_sum / self.mesh.size() as f64
     }
 
-    fn propagator_product(q1: &RField, q2: &RField) -> f64 {
+    fn partition_sum(q1: &RField, q2: &RField) -> f64 {
         Zip::from(q1).and(q2).fold(0.0, |acc, h, t| acc + h * t)
     }
 
@@ -91,8 +91,8 @@ impl BlockSolver {
         self.concentration.fill(0.0);
 
         // Reverse to account for N - s indexing of qfields
-        let forward_iter = self.forward.qfields().iter();
-        let reverse_iter = self.reverse.qfields().iter().rev();
+        let forward_iter = self.forward.iter();
+        let reverse_iter = self.reverse.iter().rev();
 
         forward_iter
             .zip(reverse_iter)
@@ -163,7 +163,7 @@ mod tests {
         assert!(qr.head().iter().all(|x| *x == 1.0));
 
         // Propagators should be equivalent at all contour points due to symmetry
-        for (f, r) in qf.qfields().iter().zip(qr.qfields().iter()) {
+        for (f, r) in qf.iter().zip(qr.iter()) {
             assert_eq!(f, r);
         }
     }
@@ -175,12 +175,10 @@ mod tests {
         let qr = solver.reverse();
 
         // Partition product should be equivalent at all (s, N-s-1) pairs along the chain
-        let forward_iter = qf.qfields().iter();
-        let reverse_iter = qr.qfields().iter().rev();
-
-        let partition_sums: Vec<f64> = forward_iter
-            .zip(reverse_iter)
-            .map(|(f, r)| BlockSolver::propagator_product(f, r))
+        let partition_sums: Vec<f64> = qf
+            .iter()
+            .zip(qr.iter().rev())
+            .map(|(f, r)| BlockSolver::partition_sum(f, r))
             .collect();
 
         let first = partition_sums[0];
