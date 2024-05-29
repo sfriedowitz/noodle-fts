@@ -77,7 +77,7 @@ impl Domain {
         &self.ksq
     }
 
-    pub fn update_ksq(&mut self) -> Result<()> {
+    pub fn update_ksq(&mut self) {
         let kvecs = match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
             Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),
@@ -86,9 +86,9 @@ impl Domain {
         let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
         let ksq = (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
-            .into_shape(self.mesh.kmesh())?;
+            .into_shape(self.mesh.kmesh())
+            .expect("kvecs size should match ksq field");
         self.ksq.assign(&ksq);
-        Ok(())
     }
 }
 

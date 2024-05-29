@@ -8,12 +8,12 @@ use ndrustfft::{
 use super::Mesh;
 use crate::{CField, RField};
 
-const PARALLEL_FFT_CUTOFF: usize = 50_000;
+/// Cutoff in mesh size for when to use parallel iteration when applying the FFTs.
+/// Parallel seems to give a bit of a speedup at around 100k elements.
+const PARALLEL_FFT_CUTOFF: usize = 100_000;
 
 /// Wrapper for real-to-complex FFTs over a multi-dimensional array.
 /// The real-to-complex transformation is performed over the last axis of the arrays.
-///
-/// Parallel seems to be faster when the total mesh size >= 200,000 or so.
 #[derive(Clone)]
 pub struct FFT {
     // 1 real, ndim-1 complex handlers

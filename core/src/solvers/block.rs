@@ -106,7 +106,7 @@ impl BlockSolver {
             // because index 0 on the reverse propagator is for position N on the chain
             Zip::from(&mut self.concentration)
                 .and(qf.position(s))
-                .and(qr.position(s))
+                .and(qr.position(ns - s - 1))
                 .for_each(|c, x, y| *c += coef * x * y);
         }
 

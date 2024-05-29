@@ -144,7 +144,7 @@ mod tests {
         let cell = UnitCell::lamellar(length).unwrap();
 
         let mut domain = Domain::new(mesh, cell).unwrap();
-        domain.update_ksq().unwrap();
+        domain.update_ksq();
 
         let mut solver = PolymerSolver::new(mesh, polymer);
 
@@ -152,8 +152,8 @@ mod tests {
         solver.solve(&domain, &fields);
         let elapsed = now.elapsed();
 
-        dbg!(x.as_slice().unwrap());
-        dbg!(solver.concentration().get(&0).unwrap().as_slice().unwrap());
+        dbg!(x);
+        dbg!(solver.concentration().get(&0).unwrap());
         dbg!(elapsed);
     }
 }

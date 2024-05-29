@@ -106,7 +106,7 @@ impl System {
         &self.fields
     }
 
-    pub fn concenrations(&self) -> &[RField] {
+    pub fn concentrations(&self) -> &[RField] {
         &self.concentrations
     }
 
@@ -114,13 +114,21 @@ impl System {
         &self.residuals
     }
 
+    pub fn total_concentration(&self) -> RField {
+        let mut total = RField::zeros(self.domain.mesh());
+        for conc in self.concentrations.iter() {
+            total += conc;
+        }
+        total
+    }
+
     pub fn iter_updater(&mut self) -> impl Iterator<Item = (&mut RField, &RField)> {
         self.fields.iter_mut().zip(&self.residuals)
     }
 
-    pub fn update(&mut self) -> Result<()> {
+    pub fn update(&mut self) {
         // Update ksq grid
-        self.domain.update_ksq()?;
+        self.domain.update_ksq();
 
         // Reset concentration fields
         for conc in self.concentrations.iter_mut() {
@@ -139,8 +147,6 @@ impl System {
 
         // Update residuals
         self.update_residuals();
-
-        Ok(())
     }
 
     fn update_residuals(&mut self) {
@@ -155,25 +161,25 @@ impl System {
 
         // Initial residual: potential - actual fields
         for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter()) {
-            Zip::from(residual).and(field).for_each(|r, w| *r = *r - w);
+            Zip::from(residual).and(field).for_each(|r, w| *r -= w);
         }
 
-        // // Residuals for monomers [1, nmonomer) are differences from monomer 0
-        // let (residual_zero, residual_others) = self.residuals.split_at_mut(1);
-        // for other in residual_others.iter_mut() {
-        //     *other -= &residual_zero[0];
-        // }
+        // Residuals for monomers [1, nmonomer) are differences from monomer 0
+        // Residual for monomer 0 imposes incompressibility: sum(concentrations) - 1.0
+        let (residual_zero, residual_others) = self.residuals.split_at_mut(1);
+        for other in residual_others.iter_mut() {
+            *other -= &residual_zero[0];
+        }
 
-        // // Residual for monomer 0 imposes incompressibility: sum(concentrations) - 1.0
-        // residual_zero[0].fill(-1.0);
-        // for conc in self.concentrations.iter() {
-        //     residual_zero[0] += conc;
-        // }
+        residual_zero[0].fill(-1.0);
+        for conc in self.concentrations.iter() {
+            residual_zero[0] += conc;
+        }
 
         // Mean-subtract fields and residuals (only closed ensemble)
         for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter_mut()) {
-            *residual -= residual.mean().unwrap();
-            *field -= field.mean().unwrap();
+            *residual -= residual.mean().expect("residual mean should not be empty");
+            *field -= field.mean().expect("field mean should not be empty");
         }
     }
 
@@ -182,6 +188,9 @@ impl System {
             return Err("number of fields != number of monomers".into());
         }
         for (current, new) in self.fields.iter_mut().zip(fields.iter()) {
+            if new.shape() != current.shape() {
+                return Err("new field shape != current shape".into());
+            }
             current.assign(&new);
         }
         Ok(())
@@ -192,6 +201,9 @@ impl System {
             return Err("number of concentration fields != number of monomers".into());
         }
         for (current, new) in self.concentrations.iter_mut().zip(concentrations.iter()) {
+            if new.shape() != current.shape() {
+                return Err("new concentration shape != current shape".into());
+            }
             current.assign(&new);
         }
         Ok(())
@@ -295,7 +307,7 @@ mod tests {
 
         // When: System initialized with zero fields (concentration is equal to bulk values)
         let mut system = System::new(domain, itx, species).unwrap();
-        system.update().unwrap();
+        system.update();
 
         // Then: Free energy should be equal to its bulk value
         let f = system.free_energy();
