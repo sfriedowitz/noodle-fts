@@ -59,7 +59,7 @@ impl SolverOps for PolymerSolver {
         self.partition
     }
 
-    fn concentration(&self) -> &HashMap<usize, RField> {
+    fn concentrations(&self) -> &HashMap<usize, RField> {
         &self.concentration
     }
 
@@ -153,7 +153,12 @@ mod tests {
         let elapsed = now.elapsed();
 
         dbg!(x);
-        dbg!(solver.concentration().get(&0).unwrap());
+        dbg!(solver.concentrations().get(&0).unwrap());
         dbg!(elapsed);
+    }
+
+    #[test]
+    fn test_diblock() {
+        todo!()
     }
 }

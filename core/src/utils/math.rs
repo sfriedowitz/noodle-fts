@@ -1,7 +1,3 @@
-use ndarray::{Array1, Axis};
-
-use crate::RField;
-
 pub const PI: f64 = std::f64::consts::PI;
 pub const HALF_PI: f64 = PI / 2.0;
 pub const THIRD_PI: f64 = PI / 3.0;
@@ -27,28 +23,10 @@ pub fn rfftfreq(n: usize, d: Option<f64>) -> impl Iterator<Item = f64> + Clone {
     (0..n / 2 + 1).map(move |i| i as f64 / norm)
 }
 
-pub fn simpsons(x: &RField, dx: Option<f64>, axis: Axis) -> RField {
-    // This probably is inaccurate if the broadcast dimension is ambiguous
-    let dx = dx.unwrap_or(1.0);
-
-    let n = x.shape()[axis.0];
-    let coef = Array1::from_iter((0..n).map(|i| {
-        if i == 0 || i == n - 1 {
-            1.0
-        } else if i % 2 == 0 {
-            2.0
-        } else {
-            4.0
-        }
-    }));
-
-    (dx / 3.0) * (coef * x).sum_axis(axis)
-}
-
 #[cfg(test)]
 mod tests {
 
-    use ndarray::{Array1, Axis};
+    use ndarray::Array1;
 
     use super::*;
 
@@ -64,14 +42,5 @@ mod tests {
         let got = Array1::from_iter(rfftfreq(4, Some(0.25)));
         let expected = Array1::from_vec(vec![0.0, 1.0, 2.0]);
         assert!(got.abs_diff_eq(&expected, 1e-8));
-    }
-
-    #[test]
-    fn test_simpsons_integration() {
-        let x = Array1::linspace(0.0, 1.0, 11).into_dyn();
-        let x2 = &x * &x;
-        let output = simpsons(&x2, Some(0.1), Axis(0));
-        dbg!(x);
-        dbg!(output);
     }
 }

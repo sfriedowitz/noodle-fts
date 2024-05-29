@@ -36,7 +36,7 @@ impl SolverOps for PointSolver {
         self.partition
     }
 
-    fn concentration(&self) -> &HashMap<usize, RField> {
+    fn concentrations(&self) -> &HashMap<usize, RField> {
         &self.concentration
     }
 

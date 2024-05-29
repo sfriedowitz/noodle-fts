@@ -1,4 +1,4 @@
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use ndarray::Zip;
 use rand::{distributions::Distribution, Rng};
 
@@ -19,6 +19,8 @@ pub struct System {
     fields: Vec<RField>,
     concentrations: Vec<RField>,
     residuals: Vec<RField>,
+    potentials: Vec<RField>,
+    incompressibility: RField,
 }
 
 impl System {
@@ -42,6 +44,8 @@ impl System {
         let fields = vec![RField::zeros(domain.mesh()); monomers.len()];
         let concentrations = vec![RField::zeros(domain.mesh()); monomers.len()];
         let residuals = vec![RField::zeros(domain.mesh()); monomers.len()];
+        let potentials = vec![RField::zeros(domain.mesh()); monomers.len()];
+        let incompressibility = RField::zeros(domain.mesh());
 
         Ok(System {
             domain,
@@ -51,6 +55,8 @@ impl System {
             fields,
             concentrations,
             residuals,
+            potentials,
+            incompressibility,
         })
     }
 
@@ -127,55 +133,62 @@ impl System {
     }
 
     pub fn update(&mut self) {
-        // Update ksq grid
         self.domain.update_ksq();
+        self.update_concentrations();
+        self.update_potentials();
+        self.update_incompressibility();
+        self.update_residuals();
+    }
 
+    fn update_concentrations(&mut self) {
         // Reset concentration fields
         for conc in self.concentrations.iter_mut() {
             conc.fill(0.0);
         }
-
+        // Solve the species given current fields/domain
         for solver in self.solvers.iter_mut() {
-            // Solve the species given current fields/domain
             solver.solve(&self.domain, &self.fields);
-
-            // Accumulate solver concentrations into system fields
-            for (id, conc) in solver.concentration().iter() {
+            for (id, conc) in solver.concentrations().iter() {
                 self.concentrations[*id] += conc;
             }
         }
+    }
 
-        // Update residuals
-        self.update_residuals();
+    fn update_potentials(&mut self) {
+        for potential in self.potentials.iter_mut() {
+            potential.fill(0.0);
+        }
+        self.interaction
+            .add_gradients(&self.concentrations, &mut self.potentials)
+    }
+
+    fn update_incompressibility(&mut self) {
+        // Initial field set to sum(c) - 1.0
+        self.incompressibility.fill(-1.0);
+        for conc in self.concentrations.iter() {
+            self.incompressibility += conc;
+        }
+        // Average (w - p) for all fields
+        for (field, potential) in self.fields.iter().zip(self.potentials.iter()) {
+            Zip::from(&mut self.incompressibility)
+                .and(field)
+                .and(potential)
+                .for_each(|i, w, p| *i += w - p)
+        }
+        self.incompressibility /= self.nmonomer() as f64;
     }
 
     fn update_residuals(&mut self) {
-        // Reset residuals
-        for residual in self.residuals.iter_mut() {
-            residual.fill(0.0);
+        // Residuals set to r = p + i - w
+        for (residual, field, potential) in
+            izip!(&mut self.residuals, &self.fields, &self.potentials)
+        {
+            Zip::from(residual)
+                .and(field)
+                .and(potential)
+                .and(&self.incompressibility)
+                .for_each(|r, w, p, i| *r = p + i - w)
         }
-
-        // Add gradient of interaction
-        self.interaction
-            .add_gradients(&self.concentrations, &mut self.residuals);
-
-        // Initial residual: potential - actual fields
-        for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter()) {
-            Zip::from(residual).and(field).for_each(|r, w| *r -= w);
-        }
-
-        // Residuals for monomers [1, nmonomer) are differences from monomer 0
-        // Residual for monomer 0 imposes incompressibility: sum(concentrations) - 1.0
-        let (residual_zero, residual_others) = self.residuals.split_at_mut(1);
-        for other in residual_others.iter_mut() {
-            *other -= &residual_zero[0];
-        }
-
-        residual_zero[0].fill(-1.0);
-        for conc in self.concentrations.iter() {
-            residual_zero[0] += conc;
-        }
-
         // Mean-subtract fields and residuals (only closed ensemble)
         for (residual, field) in self.residuals.iter_mut().zip(self.fields.iter_mut()) {
             *residual -= residual.mean().expect("residual mean should not be empty");
