@@ -3,11 +3,7 @@ use std::collections::HashMap;
 use enum_dispatch::enum_dispatch;
 
 use super::{PointSolver, PolymerSolver};
-use crate::{
-    chem::Species,
-    domain::{Domain, Mesh},
-    RField,
-};
+use crate::{chem::Species, domain::Mesh, RField};
 
 #[enum_dispatch]
 pub trait SolverOps {
@@ -17,7 +13,7 @@ pub trait SolverOps {
 
     fn concentrations(&self) -> &HashMap<usize, RField>;
 
-    fn solve(&mut self, domain: &Domain, fields: &[RField]);
+    fn solve(&mut self, fields: &[RField], ksq: &RField);
 }
 
 #[enum_dispatch(SolverOps)]

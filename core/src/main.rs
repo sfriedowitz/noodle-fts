@@ -4,8 +4,8 @@ use fts::{chem::*, domain::*, system::*};
 use ndarray_rand::rand_distr::Normal;
 
 fn main() {
-    let mesh = Mesh::Two(64, 64);
-    let cell = UnitCell::square(10.0).unwrap();
+    let mesh = Mesh::One(128);
+    let cell = UnitCell::lamellar(10.0).unwrap();
     let domain = Domain::new(mesh, cell).unwrap();
 
     let monomer_a = Monomer::new(0, 1.0);
@@ -29,6 +29,7 @@ fn main() {
 
     let mut updater = FieldUpdater::new(&system, 0.25, Some(1e-5));
 
+    let total = Instant::now();
     for step in 0..1000 {
         let now = Instant::now();
         updater.step(&mut system);
@@ -46,6 +47,6 @@ fn main() {
             break;
         }
     }
-    dbg!(system.free_energy_bulk());
+    println!("Total time = {:.5} sec", total.elapsed().as_secs_f64());
     // dbg!(system.total_concentration());
 }

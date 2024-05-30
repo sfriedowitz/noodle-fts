@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use super::{BlockSolver, PropagatorDirection, SolverOps};
+use super::{BlockSolver, PropagatorDirection, SolverOps, StepMethod};
 use crate::{
     chem::{Polymer, Species, SpeciesDescription},
-    domain::{Domain, Mesh},
+    domain::Mesh,
     RField,
 };
 
@@ -63,10 +63,7 @@ impl SolverOps for PolymerSolver {
         &self.concentrations
     }
 
-    fn solve(&mut self, domain: &Domain, fields: &[RField]) {
-        // Get ksq grid from domain
-        let ksq = domain.ksq();
-
+    fn solve(&mut self, fields: &[RField], ksq: &RField) {
         // Update solver steps with current fields
         for solver in self.block_solvers.iter_mut() {
             solver.update_step(&fields, &ksq);
@@ -75,14 +72,14 @@ impl SolverOps for PolymerSolver {
         // Propagate forward (initialize first solver w/ empty source)
         let mut source: Option<&RField> = None;
         for solver in self.block_solvers.iter_mut() {
-            solver.solve(source, PropagatorDirection::Forward);
+            solver.solve(source, PropagatorDirection::Forward, StepMethod::RQM4);
             source = Some(solver.forward().tail());
         }
 
         // Propagate reverse (initialize last solver w/ empty source)
         source = None;
         for solver in self.block_solvers.iter_mut().rev() {
-            solver.solve(source, PropagatorDirection::Reverse);
+            solver.solve(source, PropagatorDirection::Reverse, StepMethod::RQM4);
             source = Some(solver.reverse().tail());
         }
 
@@ -116,15 +113,14 @@ mod tests {
     use super::*;
     use crate::{
         chem::{Block, Monomer},
-        domain::UnitCell,
+        domain::{Domain, UnitCell},
     };
 
     #[test]
     fn test_multiblock_partition() {
         let mesh = Mesh::One(16);
         let cell = UnitCell::lamellar(10.0).unwrap();
-        let mut domain = Domain::new(mesh, cell).unwrap();
-        domain.update_ksq();
+        let domain = Domain::new(mesh, cell).unwrap();
 
         let nmonomer = 5;
         let blocks: Vec<Block> = (0..nmonomer)
@@ -137,9 +133,10 @@ mod tests {
         let fields: Vec<RField> = (0..nmonomer)
             .map(|_| RField::random_using(mesh, &distr, &mut rng))
             .collect();
+        let ksq = domain.ksq();
 
         let mut solver = PolymerSolver::new(mesh, polymer);
-        solver.solve(&domain, &fields);
+        solver.solve(&fields, &ksq);
 
         // Partition should be identical for any block along the chain contour
         let partitions: Vec<f64> = solver

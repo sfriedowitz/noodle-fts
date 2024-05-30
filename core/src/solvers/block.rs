@@ -1,13 +1,7 @@
 use ndarray::Zip;
 
-use super::{Propagator, PropagatorStep};
+use super::{propagator::PropagatorDirection, Propagator, PropagatorStep, StepMethod};
 use crate::{chem::Block, domain::Mesh, RField};
-
-#[derive(Debug, Clone, Copy)]
-pub enum PropagatorDirection {
-    Forward,
-    Reverse,
-}
 
 #[derive(Debug)]
 pub struct BlockSolver {
@@ -64,13 +58,18 @@ impl BlockSolver {
         partition_sum / self.mesh.size() as f64
     }
 
-    pub fn solve(&mut self, source: Option<&RField>, direction: PropagatorDirection) {
+    pub fn solve(
+        &mut self,
+        source: Option<&RField>,
+        direction: PropagatorDirection,
+        method: StepMethod,
+    ) {
         let propagator = match direction {
             PropagatorDirection::Forward => &mut self.forward,
             PropagatorDirection::Reverse => &mut self.reverse,
         };
         propagator.update_head(source.into_iter());
-        propagator.propagate(&mut self.step);
+        propagator.propagate(&mut self.step, method);
     }
 
     pub fn update_step(&mut self, fields: &[RField], ksq: &RField) {
@@ -126,9 +125,7 @@ mod tests {
     fn get_solver() -> BlockSolver {
         let mesh = Mesh::One(16);
         let cell = UnitCell::lamellar(10.0).unwrap();
-
-        let mut domain = Domain::new(mesh, cell).unwrap();
-        domain.update_ksq();
+        let domain = Domain::new(mesh, cell).unwrap();
 
         let mut rng = SmallRng::seed_from_u64(0);
         let distr = Normal::new(0.0, 0.1).unwrap();
@@ -137,9 +134,9 @@ mod tests {
 
         let block = Block::new(Monomer::new(0, 1.0), 100, 1.0);
         let mut solver = BlockSolver::new(block, mesh, 10, 0.1);
-        solver.update_step(&vec![field], ksq);
-        solver.solve(None, PropagatorDirection::Forward);
-        solver.solve(None, PropagatorDirection::Reverse);
+        solver.update_step(&vec![field], &ksq);
+        solver.solve(None, PropagatorDirection::Forward, StepMethod::RK2);
+        solver.solve(None, PropagatorDirection::Reverse, StepMethod::RK2);
 
         solver
     }
@@ -164,7 +161,7 @@ mod tests {
     fn test_partition_at_position() {
         let solver = get_solver();
 
-        // Partition should be identical when computed at any index along the contour
+        // Partition should be the same regardless of the contour index
         let partitions: Vec<f64> = (0..solver.ns())
             .map(|s| solver.compute_partition(s))
             .collect();

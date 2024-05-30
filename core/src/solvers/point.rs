@@ -5,12 +5,13 @@ use ndarray::Zip;
 use super::SolverOps;
 use crate::{
     chem::{Point, Species, SpeciesDescription},
-    domain::{Domain, Mesh},
+    domain::Mesh,
     RField,
 };
 
 #[derive(Debug)]
 pub struct PointSolver {
+    mesh: Mesh,
     species: Point,
     concentrations: HashMap<usize, RField>,
     partition: f64,
@@ -20,6 +21,7 @@ impl PointSolver {
     pub fn new(mesh: Mesh, species: Point) -> Self {
         let concentrations = HashMap::from([(species.monomer.id, RField::zeros(mesh))]);
         Self {
+            mesh,
             species,
             concentrations,
             partition: 1.0,
@@ -40,7 +42,7 @@ impl SolverOps for PointSolver {
         &self.concentrations
     }
 
-    fn solve(&mut self, domain: &Domain, fields: &[RField]) {
+    fn solve(&mut self, fields: &[RField], _ksq: &RField) {
         let monomer = self.species.monomer;
         let field = &fields[monomer.id];
         let concentration = self.concentrations.get_mut(&monomer.id).unwrap();
@@ -55,7 +57,7 @@ impl SolverOps for PointSolver {
             });
 
         // Normalize partition sum
-        self.partition = partition_sum / domain.mesh_size() as f64;
+        self.partition = partition_sum / self.mesh.size() as f64;
 
         // Normalize concentration inplace
         let prefactor = self.species.phi() / self.partition;
@@ -67,7 +69,10 @@ impl SolverOps for PointSolver {
 mod tests {
 
     use super::*;
-    use crate::{chem::Monomer, domain::UnitCell};
+    use crate::{
+        chem::Monomer,
+        domain::{Domain, UnitCell},
+    };
 
     #[test]
     fn test_zero_field() {
@@ -78,9 +83,10 @@ mod tests {
         let phi = 0.235;
         let point = Point::new(Monomer::new(0, 1.0), phi);
         let fields = vec![RField::zeros(mesh); 1];
+        let ksq = domain.ksq();
 
         let mut solver = PointSolver::new(mesh, point);
-        solver.solve(&domain, &fields);
+        solver.solve(&fields, &ksq);
 
         // Concentration should be the bulk fraction in the absence of a field
         let conc = solver.concentrations().get(&point.monomer.id).unwrap();

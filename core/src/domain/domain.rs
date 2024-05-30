@@ -45,7 +45,6 @@ fn get_kvecs_3d(nx: usize, ny: usize, nz: usize) -> Array2<f64> {
 pub struct Domain {
     mesh: Mesh,
     cell: UnitCell,
-    ksq: RField,
 }
 
 impl Domain {
@@ -53,8 +52,7 @@ impl Domain {
         if mesh.ndim() != cell.ndim() {
             return Err("mesh dimension != cell dimension".into());
         }
-        let ksq = RField::zeros(mesh.kmesh());
-        Ok(Self { mesh, cell, ksq })
+        Ok(Self { mesh, cell })
     }
 
     pub fn ndim(&self) -> usize {
@@ -69,26 +67,18 @@ impl Domain {
         &self.cell
     }
 
-    pub fn mesh_size(&self) -> usize {
-        self.mesh.size()
-    }
-
-    pub fn ksq(&self) -> &RField {
-        &self.ksq
-    }
-
-    pub fn update_ksq(&mut self) {
+    pub fn ksq(&self) -> RField {
+        // TODO: Do we care that this is allocating?
         let kvecs = match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
             Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),
             Mesh::Three(nx, ny, nz) => get_kvecs_3d(nx, ny, nz),
         };
         let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
-        let ksq = (kvecs * kvecs_scaled)
+        (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
             .into_shape(self.mesh.kmesh())
-            .expect("kvecs size should match ksq field");
-        self.ksq.assign(&ksq);
+            .expect("kvecs size should match ksq field")
     }
 }
 

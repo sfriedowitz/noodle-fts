@@ -1,15 +1,19 @@
-use ndarray::Zip;
-use num::complex::Complex64;
-
 use crate::{
     domain::{Mesh, FFT},
+    fields::FieldOps,
     CField, RField,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StepMethod {
     RK2,
     RQM4,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropagatorDirection {
+    Forward,
+    Reverse,
 }
 
 #[derive(Debug)]
@@ -58,25 +62,18 @@ impl PropagatorStep {
         // Update w-operators:
         // Full = exp(-w * size * ds / 2)
         // Half = exp(-w * size * (ds / 2) / 2)
-        Zip::from(&mut self.lw1)
-            .and(&mut self.lw2)
-            .and(field)
-            .for_each(|full, half, w| {
-                *full = (-lw_coeff * monomer_size * w).exp();
-                *half = (-lw_coeff * monomer_size * w / 2.0).exp();
-            });
+        self.lw1
+            .assign_unary_fn(&field, |w| (-lw_coeff * monomer_size * w).exp());
+        self.lw2
+            .assign_unary_fn(&field, |w| (-lw_coeff * monomer_size * w / 2.0).exp());
 
         // Update k-operators:
         // Full = exp(-k^2 * b^2 * ds / 6)
         // Half = exp(-k^2 * b^2 * (ds / 2) / 6)
-        Zip::from(&mut self.lk1)
-            .and(&mut self.lk2)
-            .and(ksq)
-            .for_each(|full, half, ksq| {
-                let ksq_complex: Complex64 = ksq.into();
-                *full = (-lk_coeff * ksq_complex).exp();
-                *half = (-lk_coeff * ksq_complex / 2.0).exp();
-            });
+        self.lk1
+            .assign_unary_fn(&ksq, |k2| (-lk_coeff * k2).exp().into());
+        self.lk2
+            .assign_unary_fn(&ksq, |k2| (-lk_coeff * k2 / 2.0).exp().into());
     }
 
     pub fn apply(&mut self, q_in: &RField, q_out: &mut RField, method: StepMethod) {
@@ -92,17 +89,14 @@ impl PropagatorStep {
                 self.step_full(q_in);
                 self.step_double_half(q_in);
                 // Richardson extrapolation of the results
-                Zip::from(q_out)
-                    .and(&self.q1)
-                    .and(&self.q2)
-                    .for_each(|output, full, half| *output = (4.0 * half - full) / 3.0);
+                q_out.assign_binary_fn(&self.q1, &self.q2, |full, half| (4.0 * half - full) / 3.0);
             }
         }
     }
 
     fn step_full(&mut self, q_in: &RField) {
         // Apply lw1 to q_in, store in qr
-        Self::multiply_operator_into(&self.lw1, q_in, &mut self.qr);
+        self.qr.assign_binary_fn(&self.lw1, q_in, |x, y| x * y);
 
         // Forward FFT into qk
         self.fft.forward(&self.qr, &mut self.qk);
@@ -114,12 +108,12 @@ impl PropagatorStep {
         self.fft.inverse(&self.qk, &mut self.qr);
 
         // Apply lw1 operator to qr, store in q1
-        Self::multiply_operator_into(&self.lw1, &self.qr, &mut self.q1);
+        self.q1.assign_binary_fn(&self.lw1, &self.qr, |x, y| x * y);
     }
 
     fn step_double_half(&mut self, q_in: &RField) {
         // Apply lw2 to q_in, store in qr
-        Self::multiply_operator_into(&self.lw2, q_in, &mut self.qr);
+        self.qr.assign_binary_fn(&self.lw2, q_in, |x, y| x * y);
 
         // Forward FFT into qk
         self.fft.forward(&self.qr, &mut self.qk);
@@ -143,14 +137,7 @@ impl PropagatorStep {
         self.fft.inverse(&self.qk, &mut self.qr);
 
         // Apply lk2 operator to qr, store in q2
-        Self::multiply_operator_into(&self.lw2, &self.qr, &mut self.q2);
-    }
-
-    fn multiply_operator_into(operator: &RField, input: &RField, output: &mut RField) {
-        Zip::from(operator)
-            .and(input)
-            .and(output)
-            .for_each(|operator, input, output| *output = operator * input)
+        self.q2.assign_binary_fn(&self.lw2, &self.qr, |x, y| x * y);
     }
 }
 
@@ -202,12 +189,12 @@ impl Propagator {
         }
     }
 
-    pub fn propagate(&mut self, step: &mut PropagatorStep) {
+    pub fn propagate(&mut self, step: &mut PropagatorStep, method: StepMethod) {
         for s in 1..self.ns() {
             let (left, right) = self.qfields.split_at_mut(s);
             let q_in = &left[left.len() - 1];
             let q_out = &mut right[0];
-            step.apply(q_in, q_out, StepMethod::RK2)
+            step.apply(q_in, q_out, method)
         }
     }
 }

@@ -68,6 +68,8 @@ impl Interaction {
 
 #[cfg(test)]
 mod tests {
+    use float_cmp::assert_approx_eq;
+
     use super::*;
     use crate::domain::Mesh;
 
@@ -77,7 +79,6 @@ mod tests {
         let itx = Interaction::new(nmonomer);
 
         let got_pairs: Vec<_> = itx.iter_pairs().collect();
-
         let mut expected_pairs: Vec<(usize, usize)> = vec![];
         for i in 0..nmonomer {
             for j in 0..nmonomer {
@@ -102,7 +103,7 @@ mod tests {
         let energy = itx.energy(&concentrations);
 
         // 2 * 0.75 * 0.25 = 0.375
-        assert_eq!(energy, 0.375)
+        assert_approx_eq!(f64, energy, 0.375)
     }
 
     #[test]
@@ -110,10 +111,10 @@ mod tests {
         let mut itx = Interaction::new(2);
         itx.set_chi(0, 1, 2.0);
 
-        let concentrations = vec![0.5, 0.5];
+        let concentrations = vec![0.9, 0.1];
         let energy = itx.energy_bulk(&concentrations);
 
-        // 2 * 0.5 * 0.5 = 0.5
-        assert_eq!(energy, 0.5)
+        // 2 * 0.9 * 0.1 = 0.18
+        assert_approx_eq!(f64, energy, 0.18)
     }
 }

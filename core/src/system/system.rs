@@ -207,7 +207,6 @@ impl System {
     /// - Updating the Lagrange multiplier incompressibility field.
     /// - Updating the system residuals based on the current fields and concentrations.
     pub fn update(&mut self) {
-        self.domain.update_ksq(); // TODO: Add this to the system state
         self.update_concentrations();
         self.update_potentials();
         self.update_incompressibility();
@@ -221,8 +220,9 @@ impl System {
             conc.fill(0.0);
         }
         // Solve the species given current fields/domain
+        let ksq = self.domain.ksq();
         for solver in self.solvers.iter_mut() {
-            solver.solve(&self.domain, &self.fields);
+            solver.solve(&self.fields, &ksq);
             for (id, conc) in solver.concentrations().iter() {
                 self.concentrations[*id] += conc;
                 self.total_concentration += conc;
@@ -291,7 +291,7 @@ impl System {
                 let exchange_sum = Zip::from(field)
                     .and(conc)
                     .fold(0.0, |acc, w, c| acc + w * c);
-                -1.0 * exchange_sum / self.domain.mesh_size() as f64
+                -1.0 * exchange_sum / self.domain.mesh().size() as f64
             })
             .sum();
 
