@@ -1,5 +1,3 @@
-use std::ops::AddAssign;
-
 use ndarray::{ArrayD, Zip};
 use num::complex::Complex64;
 
@@ -12,73 +10,31 @@ pub type RField = Field<f64>;
 /// Complex-valued multi-dimensional field grid.
 pub type CField = Field<Complex64>;
 
-pub trait FieldOps<A>
-where
-    A: AddAssign<A>,
-{
-    /// Perform the fold with accumulation defined by `acc + f(self, other)`.
-    fn fold_with<B, C, F: FnMut(C, &A, &B) -> C>(&self, init: C, other: &Field<B>, f: F) -> C;
+pub trait FieldExt<A> {
+    /// Accumulate `f(acc, self, other)` from the initial value `init`.
+    fn fold_with<B, C, F>(&self, other: &Field<B>, init: C, f: F) -> C
+    where
+        F: Fn(C, &A, &B) -> C;
 
-    /// Perform the operation `self = f(other)` elementwise.
-    fn assign_unary_fn<B, F: Fn(&B) -> A>(&mut self, other: &Field<B>, f: F);
-
-    /// Perform the operation `self = f(first, second)` elementwise.
-    fn assign_binary_fn<B, C, F: Fn(&B, &C) -> A>(
-        &mut self,
-        first: &Field<B>,
-        second: &Field<C>,
-        f: F,
-    );
-
-    /// Perform the operation `self += f(other)` elementwise.
-    fn add_assign_unary_fn<B, F: Fn(&B) -> A>(&mut self, other: &Field<B>, f: F);
-
-    /// Perform the operation `self += f(first, second)` elementwise.
-    fn add_assign_binary_fn<B, C, F: Fn(&B, &C) -> A>(
-        &mut self,
-        first: &Field<B>,
-        second: &Field<C>,
-        f: F,
-    );
+    /// Traverse three arrays in unspecified order, in lock step,
+    /// calling the closure `f` on each triplet of elements.
+    fn zip_mut_with_two<B, C, F>(&mut self, first: &Field<B>, second: &Field<C>, f: F)
+    where
+        F: FnMut(&mut A, &B, &C);
 }
 
-impl<A> FieldOps<A> for Field<A>
-where
-    A: AddAssign<A>,
-{
-    fn fold_with<B, C, F: FnMut(C, &A, &B) -> C>(&self, init: C, other: &Field<B>, f: F) -> C {
+impl<A> FieldExt<A> for Field<A> {
+    fn fold_with<B, C, F>(&self, other: &Field<B>, init: C, f: F) -> C
+    where
+        F: Fn(C, &A, &B) -> C,
+    {
         Zip::from(self).and(other).fold(init, f)
     }
 
-    fn assign_unary_fn<B, F: Fn(&B) -> A>(&mut self, other: &Field<B>, f: F) {
-        Zip::from(self).and(other).for_each(|y, x| *y = f(x));
-    }
-
-    fn assign_binary_fn<B, C, F: Fn(&B, &C) -> A>(
-        &mut self,
-        first: &Field<B>,
-        second: &Field<C>,
-        f: F,
-    ) {
-        Zip::from(self)
-            .and(first)
-            .and(second)
-            .for_each(|z, x, y| *z = f(x, y));
-    }
-
-    fn add_assign_unary_fn<B, F: Fn(&B) -> A>(&mut self, other: &Field<B>, f: F) {
-        Zip::from(self).and(other).for_each(|y, x| *y += f(x));
-    }
-
-    fn add_assign_binary_fn<B, C, F: Fn(&B, &C) -> A>(
-        &mut self,
-        first: &Field<B>,
-        second: &Field<C>,
-        f: F,
-    ) {
-        Zip::from(self)
-            .and(first)
-            .and(second)
-            .for_each(|z, x, y| *z += f(x, y));
+    fn zip_mut_with_two<B, C, F>(&mut self, first: &Field<B>, second: &Field<C>, f: F)
+    where
+        F: FnMut(&mut A, &B, &C),
+    {
+        Zip::from(self).and(first).and(second).for_each(f)
     }
 }

@@ -1,7 +1,9 @@
-use ndarray::Zip;
-
 use super::{propagator::PropagatorDirection, Propagator, PropagatorStep, StepMethod};
-use crate::{chem::Block, domain::Mesh, RField};
+use crate::{
+    chem::Block,
+    domain::Mesh,
+    fields::{FieldExt, RField},
+};
 
 #[derive(Debug)]
 pub struct BlockSolver {
@@ -54,16 +56,11 @@ impl BlockSolver {
     pub fn compute_partition(&self, s: usize) -> f64 {
         let qf = self.forward.position(s);
         let qr = self.reverse.position(self.ns() - s - 1);
-        let partition_sum = Zip::from(qf).and(qr).fold(0.0, |acc, h, t| acc + h * t);
+        let partition_sum = qf.fold_with(qr, 0.0, |acc, f, r| acc + f * r);
         partition_sum / self.mesh.size() as f64
     }
 
-    pub fn solve(
-        &mut self,
-        source: Option<&RField>,
-        direction: PropagatorDirection,
-        method: StepMethod,
-    ) {
+    pub fn solve(&mut self, source: Option<&RField>, direction: PropagatorDirection, method: StepMethod) {
         let propagator = match direction {
             PropagatorDirection::Forward => &mut self.forward,
             PropagatorDirection::Reverse => &mut self.reverse,
@@ -99,10 +96,11 @@ impl BlockSolver {
                 // Odd indices
                 4.0
             };
-            Zip::from(&mut self.concentration)
-                .and(self.forward.position(s))
-                .and(self.reverse.position(ns - s - 1))
-                .for_each(|c, f, r| *c += coef * f * r);
+            self.concentration.zip_mut_with_two(
+                self.forward.position(s),
+                self.reverse.position(ns - s - 1),
+                |c, f, r| *c += coef * f * r,
+            );
         }
 
         // Normalize the integral
@@ -162,9 +160,7 @@ mod tests {
         let solver = get_solver();
 
         // Partition should be the same regardless of the contour index
-        let partitions: Vec<f64> = (0..solver.ns())
-            .map(|s| solver.compute_partition(s))
-            .collect();
+        let partitions: Vec<f64> = (0..solver.ns()).map(|s| solver.compute_partition(s)).collect();
 
         partitions
             .iter()

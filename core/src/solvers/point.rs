@@ -6,7 +6,7 @@ use super::SolverOps;
 use crate::{
     chem::{Point, Species, SpeciesDescription},
     domain::Mesh,
-    RField,
+    fields::RField,
 };
 
 #[derive(Debug)]

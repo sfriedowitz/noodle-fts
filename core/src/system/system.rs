@@ -1,13 +1,13 @@
 use itertools::{izip, Itertools};
-use ndarray::Zip;
 use rand::{distributions::Distribution, Rng};
 
 use super::Interaction;
 use crate::{
     chem::{Monomer, Species, SpeciesDescription},
     domain::Domain,
+    fields::{FieldExt, RField},
     solvers::{SolverOps, SpeciesSolver},
-    RField, Result,
+    Result,
 };
 
 #[derive(Debug)]
@@ -239,31 +239,26 @@ impl System {
     }
 
     fn update_incompressibility(&mut self) {
-        // Initial field set to sum(c) - 1.0
-        self.incompressibility.fill(-1.0);
-        self.incompressibility += &self.total_concentration;
+        // Initial incompressibility set to ctot - 1.0
+        self.incompressibility
+            .zip_mut_with(&self.total_concentration, |z, ctot| *z = ctot - 1.0);
 
-        // Average (w - p) for all fields
+        // Add w - p for all fields
         for (field, potential) in izip!(&self.fields, &self.potentials) {
-            Zip::from(&mut self.incompressibility)
-                .and(field)
-                .and(potential)
-                .for_each(|z, w, p| *z += w - p)
+            self.incompressibility
+                .zip_mut_with_two(field, potential, |z, w, p| *z += w - p);
         }
 
+        // Average over nmonomer
         self.incompressibility /= self.nmonomer() as f64;
     }
 
     fn update_residuals(&mut self) {
-        // Residuals set to r = p + z - w
-        for (residual, field, potential) in
-            izip!(&mut self.residuals, &self.fields, &self.potentials)
-        {
-            Zip::from(residual)
-                .and(field)
-                .and(potential)
-                .and(&self.incompressibility)
-                .for_each(|r, w, p, z| *r = p + z - w)
+        // Residuals set to r = z + p - w
+        for (residual, field, potential) in izip!(&mut self.residuals, &self.fields, &self.potentials) {
+            residual.assign(&self.incompressibility);
+            *residual += potential;
+            *residual -= field;
         }
         // Mean-subtract fields and residuals (only closed ensemble)
         for (field, residual) in izip!(&mut self.fields, &mut self.residuals) {
@@ -288,10 +283,8 @@ impl System {
         // Exchange
         let f_exchange: f64 = izip!(&self.fields, &self.concentrations)
             .map(|(field, conc)| {
-                let exchange_sum = Zip::from(field)
-                    .and(conc)
-                    .fold(0.0, |acc, w, c| acc + w * c);
-                -1.0 * exchange_sum / self.domain.mesh().size() as f64
+                let exchange_sum = field.fold_with(conc, 0.0, |acc, w, c| acc - w * c);
+                exchange_sum / self.domain.mesh().size() as f64
             })
             .sum();
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use enum_dispatch::enum_dispatch;
 
 use super::{PointSolver, PolymerSolver};
-use crate::{chem::Species, domain::Mesh, RField};
+use crate::{chem::Species, domain::Mesh, fields::RField};
 
 #[enum_dispatch]
 pub trait SolverOps {

@@ -4,7 +4,7 @@ use super::{BlockSolver, PropagatorDirection, SolverOps, StepMethod};
 use crate::{
     chem::{Polymer, Species, SpeciesDescription},
     domain::Mesh,
-    RField,
+    fields::RField,
 };
 
 #[derive(Debug)]

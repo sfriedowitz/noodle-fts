@@ -1,6 +1,6 @@
 use ndarray::Zip;
 
-use crate::{system::System, RField};
+use crate::{fields::RField, system::System};
 
 /// Field updater implementing a Euler-Maruyama predictor-corrector method.
 ///
@@ -13,16 +13,16 @@ use crate::{system::System, RField};
 pub struct FieldUpdater {
     delta: f64,
     stopping_tol: Option<f64>,
-    temp_fields: Vec<RField>,
+    buffers: Vec<RField>,
 }
 
 impl FieldUpdater {
     pub fn new(system: &System, delta: f64, stopping_tol: Option<f64>) -> Self {
-        let temp_fields = system.fields().to_vec();
+        let buffers = system.fields().to_vec();
         Self {
             delta,
             stopping_tol,
-            temp_fields,
+            buffers,
         }
     }
 
@@ -34,13 +34,13 @@ impl FieldUpdater {
 
     pub fn step(&mut self, system: &mut System) {
         // 1) Predict
-        for (state, temp) in system.iter_mut().zip(self.temp_fields.iter_mut()) {
+        for (state, buffer) in system.iter_mut().zip(self.buffers.iter_mut()) {
             Zip::from(state.field)
+                .and(buffer)
                 .and(state.residual)
-                .and(temp)
-                .for_each(|w, r, t| {
+                .for_each(|w, b, r| {
                     *w += self.delta * r;
-                    *t = *w + 0.5 * self.delta * r;
+                    *b = *w + 0.5 * self.delta * r;
                 })
         }
 
@@ -48,12 +48,10 @@ impl FieldUpdater {
         system.update();
 
         // 3) Correct
-        for (state, temp) in system.iter().zip(self.temp_fields.iter_mut()) {
-            Zip::from(state.residual).and(temp).for_each(|r, t| {
-                *t += 0.5 * self.delta * r;
-            })
+        for (state, buffer) in system.iter().zip(self.buffers.iter_mut()) {
+            buffer.zip_mut_with(state.residual, |b, r| *b += 0.5 * self.delta * r);
         }
-        system.assign_fields(&self.temp_fields).unwrap();
+        system.assign_fields(&self.buffers).unwrap();
 
         // 4) Evaluate
         system.update();

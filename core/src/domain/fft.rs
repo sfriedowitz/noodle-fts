@@ -6,7 +6,7 @@ use ndrustfft::{
 };
 
 use super::Mesh;
-use crate::{CField, RField};
+use crate::fields::{CField, RField};
 
 /// Cutoff in mesh size for when to use parallel iteration when applying the FFTs.
 /// Parallel seems to give a bit of a speedup at around 100k elements.

@@ -1,7 +1,6 @@
 use crate::{
     domain::{Mesh, FFT},
-    fields::FieldOps,
-    CField, RField,
+    fields::{CField, FieldExt, RField},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,17 +62,17 @@ impl PropagatorStep {
         // Full = exp(-w * size * ds / 2)
         // Half = exp(-w * size * (ds / 2) / 2)
         self.lw1
-            .assign_unary_fn(&field, |w| (-lw_coeff * monomer_size * w).exp());
+            .zip_mut_with(field, |op, w| *op = (-lw_coeff * monomer_size * w).exp());
         self.lw2
-            .assign_unary_fn(&field, |w| (-lw_coeff * monomer_size * w / 2.0).exp());
+            .zip_mut_with(field, |op, w| *op = (-lw_coeff * monomer_size * w / 2.0).exp());
 
         // Update k-operators:
         // Full = exp(-k^2 * b^2 * ds / 6)
         // Half = exp(-k^2 * b^2 * (ds / 2) / 6)
         self.lk1
-            .assign_unary_fn(&ksq, |k2| (-lk_coeff * k2).exp().into());
+            .zip_mut_with(ksq, |op, k2| *op = (-lk_coeff * k2).exp().into());
         self.lk2
-            .assign_unary_fn(&ksq, |k2| (-lk_coeff * k2 / 2.0).exp().into());
+            .zip_mut_with(ksq, |op, k2| *op = (-lk_coeff * k2 / 2.0).exp().into());
     }
 
     pub fn apply(&mut self, q_in: &RField, q_out: &mut RField, method: StepMethod) {
@@ -89,14 +88,16 @@ impl PropagatorStep {
                 self.step_full(q_in);
                 self.step_double_half(q_in);
                 // Richardson extrapolation of the results
-                q_out.assign_binary_fn(&self.q1, &self.q2, |full, half| (4.0 * half - full) / 3.0);
+                q_out.zip_mut_with_two(&self.q1, &self.q2, |out, full, half| {
+                    *out = (4.0 * half - full) / 3.0
+                });
             }
         }
     }
 
     fn step_full(&mut self, q_in: &RField) {
         // Apply lw1 to q_in, store in qr
-        self.qr.assign_binary_fn(&self.lw1, q_in, |x, y| x * y);
+        self.qr.zip_mut_with_two(&self.lw1, q_in, |z, x, y| *z = x * y);
 
         // Forward FFT into qk
         self.fft.forward(&self.qr, &mut self.qk);
@@ -108,12 +109,13 @@ impl PropagatorStep {
         self.fft.inverse(&self.qk, &mut self.qr);
 
         // Apply lw1 operator to qr, store in q1
-        self.q1.assign_binary_fn(&self.lw1, &self.qr, |x, y| x * y);
+        self.q1
+            .zip_mut_with_two(&self.lw1, &self.qr, |z, x, y| *z = x * y);
     }
 
     fn step_double_half(&mut self, q_in: &RField) {
         // Apply lw2 to q_in, store in qr
-        self.qr.assign_binary_fn(&self.lw2, q_in, |x, y| x * y);
+        self.qr.zip_mut_with_two(&self.lw2, q_in, |z, x, y| *z = x * y);
 
         // Forward FFT into qk
         self.fft.forward(&self.qr, &mut self.qk);
@@ -137,7 +139,8 @@ impl PropagatorStep {
         self.fft.inverse(&self.qk, &mut self.qr);
 
         // Apply lk2 operator to qr, store in q2
-        self.q2.assign_binary_fn(&self.lw2, &self.qr, |x, y| x * y);
+        self.q2
+            .zip_mut_with_two(&self.lw2, &self.qr, |z, x, y| *z = x * y);
     }
 }
 

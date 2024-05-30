@@ -1,7 +1,7 @@
 use itertools::iproduct;
-use ndarray::{Array2, Zip};
+use ndarray::Array2;
 
-use crate::RField;
+use crate::fields::{FieldExt, RField};
 
 #[derive(Debug)]
 pub struct Interaction {
@@ -31,9 +31,7 @@ impl Interaction {
             let conc_i = &concentrations[i];
             let conc_j = &concentrations[j];
             let chi_ij = self.chi[[i, j]];
-            Zip::from(conc_i)
-                .and(conc_j)
-                .for_each(|ci, cj| energy += 0.5 * chi_ij * ci * cj);
+            energy += conc_i.fold_with(conc_j, 0.0, |acc, ci, cj| acc + 0.5 * chi_ij * ci * cj);
         }
         energy / concentrations[0].len() as f64
     }
@@ -54,9 +52,7 @@ impl Interaction {
             let omega_i = &mut fields[i];
             let conc_j = &concentrations[j];
             let chi_ij = self.chi[[i, j]];
-            Zip::from(omega_i)
-                .and(conc_j)
-                .for_each(|wi, cj| *wi += chi_ij * cj);
+            omega_i.zip_mut_with(&conc_j, |wi, cj| *wi += chi_ij * cj);
         }
     }
 

@@ -7,4 +7,3 @@ pub mod system;
 pub mod utils;
 
 pub use error::{Error, Result};
-pub use fields::{CField, Field, RField};

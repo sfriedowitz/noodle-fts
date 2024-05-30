@@ -3,8 +3,9 @@ use ndarray::{Array2, Axis};
 
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
+    fields::RField,
     utils::math::{fftfreq, rfftfreq, TWO_PI},
-    RField, Result,
+    Result,
 };
 
 fn get_kvecs_1d(nx: usize) -> Array2<f64> {
