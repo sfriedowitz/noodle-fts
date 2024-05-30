@@ -41,8 +41,8 @@ impl BlockSolver {
         self.forward.ns()
     }
 
-    pub fn block(&self) -> Block {
-        self.block
+    pub fn monomer_id(&self) -> usize {
+        self.block.monomer.id
     }
 
     pub fn concentration(&self) -> &RField {
@@ -57,13 +57,11 @@ impl BlockSolver {
         &self.reverse
     }
 
-    pub fn compute_partition(&self) -> f64 {
-        let partition_sum = Self::partition_sum(self.forward.head(), self.reverse.tail());
+    pub fn compute_partition(&self, s: usize) -> f64 {
+        let qf = self.forward.position(s);
+        let qr = self.reverse.position(self.ns() - s - 1);
+        let partition_sum = Zip::from(qf).and(qr).fold(0.0, |acc, h, t| acc + h * t);
         partition_sum / self.mesh.size() as f64
-    }
-
-    fn partition_sum(q1: &RField, q2: &RField) -> f64 {
-        Zip::from(q1).and(q2).fold(0.0, |acc, h, t| acc + h * t)
     }
 
     pub fn solve(&mut self, source: Option<&RField>, direction: PropagatorDirection) {
@@ -91,28 +89,22 @@ impl BlockSolver {
         self.concentration.fill(0.0);
 
         // Reverse to account for N - s indexing of qfields
-        let forward_iter = self.forward.iter();
-        let reverse_iter = self.reverse.iter().rev();
-
-        forward_iter
-            .zip(reverse_iter)
-            .enumerate()
-            .for_each(|(s, (qf, qr))| {
-                let coef = if s == 0 || s == ns - 1 {
-                    // Endpoints
-                    1.0
-                } else if s % 2 == 0 {
-                    // Even indices
-                    2.0
-                } else {
-                    // Odd indices
-                    4.0
-                };
-                Zip::from(&mut self.concentration)
-                    .and(qf)
-                    .and(qr)
-                    .for_each(|c, f, r| *c += coef * f * r);
-            });
+        for s in 0..ns {
+            let coef = if s == 0 || s == ns - 1 {
+                // Endpoints
+                1.0
+            } else if s % 2 == 0 {
+                // Even indices
+                2.0
+            } else {
+                // Odd indices
+                4.0
+            };
+            Zip::from(&mut self.concentration)
+                .and(self.forward.position(s))
+                .and(self.reverse.position(ns - s - 1))
+                .for_each(|c, f, r| *c += coef * f * r);
+        }
 
         // Normalize the integral
         self.concentration *= prefactor * (self.ds / 3.0);
@@ -155,35 +147,30 @@ mod tests {
     #[test]
     fn test_propagator_symmetry() {
         let solver = get_solver();
-        let qf = solver.forward();
-        let qr = solver.reverse();
 
         // Heads of both propagators should be equal to 1
-        assert!(qf.head().iter().all(|x| *x == 1.0));
-        assert!(qr.head().iter().all(|x| *x == 1.0));
+        assert!(solver.forward().head().iter().all(|x| *x == 1.0));
+        assert!(solver.reverse().head().iter().all(|x| *x == 1.0));
 
         // Propagators should be equivalent at all contour points due to symmetry
-        for (f, r) in qf.iter().zip(qr.iter()) {
-            assert_eq!(f, r);
+        for s in 0..solver.ns() {
+            let qf = solver.forward().position(s);
+            let qr = solver.reverse().position(s);
+            assert_eq!(qf, qr);
         }
     }
 
     #[test]
-    fn test_partition_symmetry() {
+    fn test_partition_at_position() {
         let solver = get_solver();
-        let qf = solver.forward();
-        let qr = solver.reverse();
 
-        // Partition product should be equivalent at all (s, N-s-1) pairs along the chain
-        let partition_sums: Vec<f64> = qf
-            .iter()
-            .zip(qr.iter().rev())
-            .map(|(f, r)| BlockSolver::partition_sum(f, r))
+        // Partition should be identical when computed at any index along the contour
+        let partitions: Vec<f64> = (0..solver.ns())
+            .map(|s| solver.compute_partition(s))
             .collect();
 
-        let first = partition_sums[0];
-        partition_sums
-            .into_iter()
-            .for_each(|elem| assert_approx_eq!(f64, elem, first));
+        partitions
+            .iter()
+            .for_each(|elem| assert_approx_eq!(f64, *elem, partitions[0]));
     }
 }

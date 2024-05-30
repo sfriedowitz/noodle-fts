@@ -1,3 +1,3 @@
 # FTS Core
 
-Core FTS library written in Rust.
+Core FTS library in Rust.

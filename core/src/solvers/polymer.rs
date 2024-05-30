@@ -11,14 +11,14 @@ use crate::{
 pub struct PolymerSolver {
     species: Polymer,
     block_solvers: Vec<BlockSolver>,
-    concentration: HashMap<usize, RField>,
+    concentrations: HashMap<usize, RField>,
     partition: f64,
 }
 
 impl PolymerSolver {
     pub fn new(mesh: Mesh, species: Polymer) -> Self {
         let block_solvers = Self::build_block_solvers(mesh, &species);
-        let concentration = HashMap::from_iter(
+        let concentrations = HashMap::from_iter(
             species
                 .monomers()
                 .iter()
@@ -27,7 +27,7 @@ impl PolymerSolver {
         Self {
             species,
             block_solvers,
-            concentration,
+            concentrations,
             partition: 1.0,
         }
     }
@@ -60,7 +60,7 @@ impl SolverOps for PolymerSolver {
     }
 
     fn concentrations(&self) -> &HashMap<usize, RField> {
-        &self.concentration
+        &self.concentrations
     }
 
     fn solve(&mut self, domain: &Domain, fields: &[RField]) {
@@ -86,8 +86,8 @@ impl SolverOps for PolymerSolver {
             source = Some(solver.reverse().tail());
         }
 
-        // Compute new partition function
-        self.partition = self.block_solvers[0].compute_partition();
+        // Compute new partition function (any solver/contour position is identical)
+        self.partition = self.block_solvers[0].compute_partition(0);
 
         // Update solver concentration
         let prefactor = self.species.phi() / self.species.size() / self.partition;
@@ -96,10 +96,10 @@ impl SolverOps for PolymerSolver {
         }
 
         // Accumulate per-block concentration in solver state
-        for (id, concentration) in self.concentration.iter_mut() {
+        for (id, concentration) in self.concentrations.iter_mut() {
             concentration.fill(0.0);
             for solver in self.block_solvers.iter() {
-                if solver.block().monomer.id == *id {
+                if solver.monomer_id() == *id {
                     *concentration += solver.concentration();
                 }
             }
@@ -109,7 +109,9 @@ impl SolverOps for PolymerSolver {
 
 #[cfg(test)]
 mod tests {
-    use ndarray::Array1;
+    use float_cmp::assert_approx_eq;
+    use ndarray_rand::{rand_distr::Normal, RandomExt};
+    use rand::{rngs::SmallRng, SeedableRng};
 
     use super::*;
     use crate::{
@@ -118,37 +120,36 @@ mod tests {
     };
 
     #[test]
-    fn test_homopolymer() {
-        let n = 100;
-        let contour_steps = 200;
-        let b = 1.0;
-
-        let rg = ((n as f64) * b * b / 6.0).sqrt();
-        let length = 10.0 * rg;
-        let nx = 64;
-
-        // Test problem from Fig. 3.14, Fredrickson 2005
-        let x = Array1::linspace(0.0, length, nx);
-        let field = 3.0 * (&x - length / 2.0) / (2.0 * rg);
-        let field = field
-            .mapv(|f| (1.0 - 2.0 * f.cosh().powf(-2.0)) / n as f64)
-            .into_dyn();
-        let fields = vec![field];
-
-        let monomer = Monomer::new(0, 1.0);
-        let block = Block::new(monomer, n, b);
-        let polymer = Polymer::new(vec![block], contour_steps, 1.0);
-
-        let mesh = Mesh::One(nx);
-        let cell = UnitCell::lamellar(length).unwrap();
-
+    fn test_multiblock_partition() {
+        let mesh = Mesh::One(16);
+        let cell = UnitCell::lamellar(10.0).unwrap();
         let mut domain = Domain::new(mesh, cell).unwrap();
         domain.update_ksq();
 
+        let nmonomer = 5;
+        let blocks: Vec<Block> = (0..nmonomer)
+            .map(|id| Block::new(Monomer::new(id, 1.0), 50, 1.0))
+            .collect();
+        let polymer = Polymer::new(blocks, 100, 1.0);
+
+        let mut rng = SmallRng::seed_from_u64(0);
+        let distr = Normal::new(0.0, 0.1).unwrap();
+        let fields: Vec<RField> = (0..nmonomer)
+            .map(|_| RField::random_using(mesh, &distr, &mut rng))
+            .collect();
+
         let mut solver = PolymerSolver::new(mesh, polymer);
         solver.solve(&domain, &fields);
-    }
 
-    #[test]
-    fn test_diblock() {}
+        // Partition should be identical for any block along the chain contour
+        let partitions: Vec<f64> = solver
+            .block_solvers
+            .iter()
+            .map(|s| s.compute_partition(0))
+            .collect();
+
+        partitions
+            .iter()
+            .for_each(|elem| assert_approx_eq!(f64, *elem, partitions[0], epsilon = 1e-8));
+    }
 }

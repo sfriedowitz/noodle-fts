@@ -12,16 +12,16 @@ use crate::{
 #[derive(Debug)]
 pub struct PointSolver {
     species: Point,
-    concentration: HashMap<usize, RField>,
+    concentrations: HashMap<usize, RField>,
     partition: f64,
 }
 
 impl PointSolver {
     pub fn new(mesh: Mesh, species: Point) -> Self {
-        let concentration = HashMap::from([(species.monomer.id, RField::zeros(mesh))]);
+        let concentrations = HashMap::from([(species.monomer.id, RField::zeros(mesh))]);
         Self {
             species,
-            concentration,
+            concentrations,
             partition: 1.0,
         }
     }
@@ -37,13 +37,13 @@ impl SolverOps for PointSolver {
     }
 
     fn concentrations(&self) -> &HashMap<usize, RField> {
-        &self.concentration
+        &self.concentrations
     }
 
     fn solve(&mut self, domain: &Domain, fields: &[RField]) {
         let monomer = self.species.monomer;
         let field = &fields[monomer.id];
-        let concentration = self.concentration.get_mut(&monomer.id).unwrap();
+        let concentration = self.concentrations.get_mut(&monomer.id).unwrap();
 
         // Compute concentration field and partition function from omega field
         let mut partition_sum = 0.0;

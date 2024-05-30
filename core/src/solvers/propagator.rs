@@ -170,11 +170,6 @@ impl Propagator {
         self.qfields.len()
     }
 
-    /// Return a `DoubleEndedIterator` over the q-fields of the propagator.
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &RField> {
-        self.qfields.iter()
-    }
-
     pub fn head(&self) -> &RField {
         &self.qfields[0]
     }
@@ -192,6 +187,14 @@ impl Propagator {
         &mut self.qfields[s]
     }
 
+    pub fn position(&self, s: usize) -> &RField {
+        &self.qfields[s]
+    }
+
+    pub fn position_mut(&mut self, s: usize) -> &mut RField {
+        &mut self.qfields[s]
+    }
+
     pub fn update_head<'a>(&mut self, sources: impl Iterator<Item = &'a RField>) {
         self.head_mut().fill(1.0);
         for source in sources {
@@ -204,7 +207,7 @@ impl Propagator {
             let (left, right) = self.qfields.split_at_mut(s);
             let q_in = &left[left.len() - 1];
             let q_out = &mut right[0];
-            step.apply(q_in, q_out, StepMethod::RQM4)
+            step.apply(q_in, q_out, StepMethod::RK2)
         }
     }
 }
