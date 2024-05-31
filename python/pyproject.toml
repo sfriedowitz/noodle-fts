@@ -16,7 +16,7 @@ all = ["pyfts[test]"]
 [tool.maturin]
 bindings = "pyo3"
 features = ["pyo3/extension-module"]
-module-name = "pyfts._pyfts"
+module-name = "pyfts._core"
 
 [tool.pytest.ini_options]
 addopts = "-v --cov src --no-cov-on-fail --disable-warnings"

@@ -133,10 +133,10 @@ impl System {
         fractions
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = FieldState<'a>> {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = MonomerState<'a>> {
         izip!(&self.fields, &self.concentrations, &self.residuals)
             .enumerate()
-            .map(|(id, (field, concentration, residual))| FieldState {
+            .map(|(id, (field, concentration, residual))| MonomerState {
                 id,
                 field,
                 concentration,
@@ -144,10 +144,10 @@ impl System {
             })
     }
 
-    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = FieldStateMut<'a>> {
+    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = MonomerStateMut<'a>> {
         izip!(&mut self.fields, &self.concentrations, &self.residuals)
             .enumerate()
-            .map(|(id, (field, concentration, residual))| FieldStateMut {
+            .map(|(id, (field, concentration, residual))| MonomerStateMut {
                 id,
                 field,
                 concentration,
@@ -328,7 +328,7 @@ impl System {
 }
 
 #[derive(Debug)]
-pub struct FieldState<'a> {
+pub struct MonomerState<'a> {
     pub id: usize,
     pub field: &'a RField,
     pub concentration: &'a RField,
@@ -336,7 +336,7 @@ pub struct FieldState<'a> {
 }
 
 #[derive(Debug)]
-pub struct FieldStateMut<'a> {
+pub struct MonomerStateMut<'a> {
     pub id: usize,
     pub field: &'a mut RField,
     pub concentration: &'a RField,

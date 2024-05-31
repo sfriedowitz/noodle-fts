@@ -4,21 +4,21 @@ use fts::{chem::*, domain::*, system::*};
 use ndarray_rand::rand_distr::Normal;
 
 fn main() {
-    let mesh = Mesh::One(128);
-    let cell = UnitCell::lamellar(10.0).unwrap();
+    let mesh = Mesh::Two(64, 64);
+    let cell = UnitCell::square(10.0).unwrap();
     let domain = Domain::new(mesh, cell).unwrap();
 
     let monomer_a = Monomer::new(0, 1.0);
     let monomer_b = Monomer::new(1, 1.0);
 
-    let block_a = Block::new(monomer_a, 70, 1.0);
-    let block_b = Block::new(monomer_b, 30, 1.0);
+    let block_a = Block::new(monomer_a, 34, 1.0);
+    let block_b = Block::new(monomer_b, 66, 1.0);
 
-    let polymer = Polymer::new(vec![block_a, block_b], 200, 1.0);
+    let polymer = Polymer::new(vec![block_a, block_b], 50, 1.0);
     let species: Vec<Species> = vec![polymer.into()];
 
     let mut itx = Interaction::new(2);
-    itx.set_chi(monomer_a.id, monomer_b.id, 0.25);
+    itx.set_chi(monomer_a.id, monomer_b.id, 0.4);
 
     let mut system = System::new(domain, itx, species).unwrap();
 

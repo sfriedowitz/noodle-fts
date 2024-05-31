@@ -10,7 +10,7 @@ description = "Python bindings to the core FTS library."
 [lib]
 name = "pyfts"
 path = "src/lib.rs"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 numpy = "0.21.0"

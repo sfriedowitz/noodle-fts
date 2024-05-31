@@ -32,7 +32,7 @@ impl FieldUpdater {
     }
 
     pub fn step(&mut self, system: &mut System) {
-        // 1) Predict
+        // 1) Predict with the "force" at time t
         for (state, buffer) in system.iter_mut().zip(self.buffers.iter_mut()) {
             Zip::from(state.field)
                 .and(buffer)
@@ -43,16 +43,16 @@ impl FieldUpdater {
                 })
         }
 
-        // 2) Evaluate
+        // 2) Evaluate with the predicted fields
         system.update();
 
-        // 3) Correct
+        // 3) Correct by averaging the "force" at time (t, t+1)
         for (state, buffer) in system.iter().zip(self.buffers.iter_mut()) {
             buffer.zip_mut_with(state.residual, |b, r| *b += 0.5 * self.delta * r);
         }
-        system.assign_fields(&self.buffers).unwrap();
 
-        // 4) Evaluate
+        // 4) Evaluate the final "force" at time t+1
+        system.assign_fields(&self.buffers).unwrap();
         system.update();
     }
 }
