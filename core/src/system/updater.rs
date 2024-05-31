@@ -12,22 +12,21 @@ use crate::{fields::RField, system::System};
 #[derive(Debug, Clone)]
 pub struct FieldUpdater {
     delta: f64,
-    stopping_tol: Option<f64>,
+    tolerance: Option<f64>,
     buffers: Vec<RField>,
 }
 
 impl FieldUpdater {
-    pub fn new(system: &System, delta: f64, stopping_tol: Option<f64>) -> Self {
-        let buffers = system.fields().to_vec();
+    pub fn new(system: &System, delta: f64, tolerance: Option<f64>) -> Self {
         Self {
             delta,
-            stopping_tol,
-            buffers,
+            tolerance,
+            buffers: system.fields().to_vec(),
         }
     }
 
     pub fn is_converged(&self, system: &System) -> bool {
-        self.stopping_tol
+        self.tolerance
             .map(|tol| system.field_error() <= tol)
             .unwrap_or(false)
     }

@@ -1,13 +1,12 @@
+mod chem;
+mod system;
+
 use pyo3::prelude::*;
 
-#[pyfunction]
-fn hello(name: String) {
-    println!("Hello from Rust, {name}")
-}
-
+// PyFTS Module
 #[pymodule]
 #[pyo3(name = "_pyfts")]
-fn extension_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(hello, m)?)?;
+fn pyfts(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<chem::PyMonomer>()?;
     Ok(())
 }

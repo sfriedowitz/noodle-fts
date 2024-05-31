@@ -1,3 +1,0 @@
-def hello(name: str) -> None:
-    """Say hello from Rust."""
-    ...

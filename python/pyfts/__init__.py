@@ -1,3 +1,1 @@
-from pyfts._pyfts import hello
-
-__all__ = ["hello"]
+from pyfts._pyfts import *
