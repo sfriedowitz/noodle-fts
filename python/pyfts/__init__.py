@@ -1,8 +1,12 @@
-from pyfts._core import Block, LamellarCell, Mesh, Monomer
+from pyfts._core import Block, LamellarCell, Mesh, Monomer, Point, Polymer, Species, UnitCell
 
 __all__ = [
     "Block",
-    "Monomer",
-    "Mesh",
     "LamellarCell",
+    "Mesh",
+    "Monomer",
+    "Point",
+    "Polymer",
+    "Species",
+    "UnitCell",
 ]

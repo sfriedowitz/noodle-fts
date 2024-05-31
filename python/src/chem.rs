@@ -1,23 +1,21 @@
-use fts::chem::{Block, Monomer};
+use fts::chem::{Block, Monomer, Point, Polymer, Species, SpeciesDescription};
 use pyo3::prelude::*;
 
-#[pyclass(module = "pyfts._core", name = "Monomer")]
+use crate::impl_conversions;
+
+#[pyclass(name = "Monomer", module = "pyfts.chem", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyMonomer {
     core: Monomer,
 }
 
-impl PyMonomer {
-    pub fn new(monomer: Monomer) -> Self {
-        Self { core: monomer }
-    }
-}
+impl_conversions!(Monomer, PyMonomer);
 
 #[pymethods]
 impl PyMonomer {
     #[new]
     fn __new__(id: usize, size: f64) -> Self {
-        Self::new(Monomer::new(id, size))
+        Monomer::new(id, size).into()
     }
 
     #[getter]
@@ -25,56 +23,30 @@ impl PyMonomer {
         self.core.id
     }
 
-    #[setter]
-    fn set_id(&mut self, id: usize) {
-        self.core.id = id;
-    }
-
     #[getter]
     fn get_size(&self) -> f64 {
         self.core.size
     }
-
-    #[setter]
-    fn set_size(&mut self, size: f64) {
-        self.core.size = size;
-    }
 }
 
-impl From<PyMonomer> for Monomer {
-    fn from(value: PyMonomer) -> Self {
-        value.core
-    }
-}
-
-#[pyclass(module = "pyfts._core", name = "Block")]
+#[pyclass(name = "Block", module = "pyfts.chem", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyBlock {
     core: Block,
 }
 
-impl PyBlock {
-    pub fn new(block: Block) -> Self {
-        Self { core: block }
-    }
-}
+impl_conversions!(Block, PyBlock);
 
 #[pymethods]
 impl PyBlock {
     #[new]
     fn __new__(monomer: PyMonomer, repeat_units: usize, segment_length: f64) -> Self {
-        let block = Block::new(monomer.into(), repeat_units, segment_length);
-        Self { core: block }
+        Block::new(monomer.into(), repeat_units, segment_length).into()
     }
 
     #[getter]
     fn get_monomer(&self) -> PyMonomer {
-        PyMonomer::new(self.core.monomer)
-    }
-
-    #[setter]
-    fn set_monomer(&mut self, monomer: PyMonomer) {
-        self.core.monomer = monomer.into();
+        self.core.monomer.into()
     }
 
     #[getter]
@@ -82,24 +54,74 @@ impl PyBlock {
         self.core.repeat_units
     }
 
-    #[setter]
-    fn set_repeat_units(&mut self, repeat_units: usize) {
-        self.core.repeat_units = repeat_units;
-    }
-
     #[getter]
     fn get_segment_length(&self) -> f64 {
         self.core.segment_length
     }
+}
 
-    #[setter]
-    fn set_segment_length(&mut self, segment_length: f64) {
-        self.core.segment_length = segment_length;
+#[pyclass(name = "Species", module = "pyfts.chem", subclass, frozen)]
+#[derive(Clone)]
+pub struct PySpecies {
+    core: Species,
+}
+
+impl_conversions!(Species, PySpecies);
+
+#[pymethods]
+impl PySpecies {
+    #[getter]
+    fn get_phi(&self) -> f64 {
+        self.core.phi()
+    }
+
+    #[getter]
+    fn get_size(&self) -> f64 {
+        self.core.size()
+    }
+
+    fn monomers(&self) -> Vec<PyMonomer> {
+        self.core.monomers().iter().copied().map(|m| m.into()).collect()
+    }
+
+    fn monomer_fraction(&self, id: usize) -> f64 {
+        self.core.monomer_fraction(id)
     }
 }
 
-impl From<PyBlock> for Block {
-    fn from(value: PyBlock) -> Self {
-        value.core
+#[pyclass(name = "Point", module = "pyfts.chem", extends=PySpecies, frozen)]
+pub struct PyPoint {}
+
+#[pymethods]
+impl PyPoint {
+    #[new]
+    fn __new__(monomer: PyMonomer, phi: f64) -> (Self, PySpecies) {
+        let point: Species = Point::new(monomer.core, phi).into();
+        let base: PySpecies = point.into();
+        (PyPoint {}, base)
+    }
+}
+
+#[pyclass(name = "Polymer", module = "pyfts.chem", extends=PySpecies, frozen)]
+pub struct PyPolymer {}
+
+#[pymethods]
+impl PyPolymer {
+    #[new]
+    fn __new__(blocks: Vec<PyBlock>, contour_steps: usize, phi: f64) -> (Self, PySpecies) {
+        let blocks = blocks.into_iter().map(|b| b.into()).collect();
+        let polymer: Species = Polymer::new(blocks, contour_steps, phi).into();
+        let base: PySpecies = polymer.into();
+        (PyPolymer {}, base)
+    }
+
+    #[getter]
+    fn get_blocks(self_: PyRef<'_, Self>) -> Vec<PyBlock> {
+        let super_ = self_.as_ref();
+        match &super_.core {
+            Species::Polymer(polymer) => polymer.blocks.iter().cloned().map(|b| b.into()).collect(),
+            // Should not be reachable
+            _ => panic!("PyPolymer didn't contain a Polymer species"),
+        }
     }
 }

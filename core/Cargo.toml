@@ -12,8 +12,9 @@ name = "fts"
 path = "src/lib.rs"
 
 [features]
-"openblas" = ["ndarray-linalg/openblas-system"]
-"default" = ["openblas"]
+"openblas" = ["ndarray-linalg/openblas"]
+"openblas-system" = ["ndarray-linalg/openblas-system"]
+"default" = ["openblas-system"]
 
 [dependencies]
 num = "0.4.2"

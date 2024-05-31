@@ -110,24 +110,50 @@ pub enum CellParameters {
     },
 }
 
-impl CellParameters {
-    pub fn into_shape_tensor(self) -> Array2<f64> {
-        match self {
+impl From<CellParameters> for Vec<f64> {
+    fn from(value: CellParameters) -> Self {
+        match value {
+            CellParameters::Lamellar { a } => vec![a],
+            CellParameters::Square { a } => vec![a],
+            CellParameters::Rectangular { a, b } => vec![a, b],
+            CellParameters::Hexagonal2D { a } => vec![a],
+            CellParameters::Oblique { a, b, gamma } => vec![a, b, gamma],
+            CellParameters::Cubic { a } => vec![a],
+            CellParameters::Tetragonal { a, c } => vec![a, c],
+            CellParameters::Orthorhombic { a, b, c } => vec![a, b, c],
+            CellParameters::Rhombohedral { a, alpha } => vec![a, alpha],
+            CellParameters::Hexagonal3D { a, c } => vec![a, c],
+            CellParameters::Monoclinic { a, b, c, beta } => vec![a, b, c, beta],
+            CellParameters::Triclinic {
+                a,
+                b,
+                c,
+                alpha,
+                beta,
+                gamma,
+            } => vec![a, b, c, alpha, beta, gamma],
+        }
+    }
+}
+
+impl From<CellParameters> for Array2<f64> {
+    fn from(value: CellParameters) -> Self {
+        match value {
             // 1D
-            Self::Lamellar { a } => shape_tensor_1d(a),
+            CellParameters::Lamellar { a } => shape_tensor_1d(a),
             // 2D
-            Self::Square { a } => shape_tensor_2d(a, a, HALF_PI),
-            Self::Rectangular { a, b } => shape_tensor_2d(a, b, HALF_PI),
-            Self::Hexagonal2D { a } => shape_tensor_2d(a, a, THIRD_PI),
-            Self::Oblique { a, b, gamma } => shape_tensor_2d(a, b, gamma),
+            CellParameters::Square { a } => shape_tensor_2d(a, a, HALF_PI),
+            CellParameters::Rectangular { a, b } => shape_tensor_2d(a, b, HALF_PI),
+            CellParameters::Hexagonal2D { a } => shape_tensor_2d(a, a, THIRD_PI),
+            CellParameters::Oblique { a, b, gamma } => shape_tensor_2d(a, b, gamma),
             // 3D
-            Self::Cubic { a } => shape_tensor_3d(a, a, a, HALF_PI, HALF_PI, HALF_PI),
-            Self::Tetragonal { a, c } => shape_tensor_3d(a, a, c, HALF_PI, HALF_PI, HALF_PI),
-            Self::Orthorhombic { a, b, c } => shape_tensor_3d(a, b, c, HALF_PI, HALF_PI, HALF_PI),
-            Self::Rhombohedral { a, alpha } => shape_tensor_3d(a, a, a, alpha, alpha, alpha),
-            Self::Hexagonal3D { a, c } => shape_tensor_3d(a, a, c, HALF_PI, HALF_PI, THIRD_PI),
-            Self::Monoclinic { a, b, c, beta } => shape_tensor_3d(a, b, c, HALF_PI, beta, HALF_PI),
-            Self::Triclinic {
+            CellParameters::Cubic { a } => shape_tensor_3d(a, a, a, HALF_PI, HALF_PI, HALF_PI),
+            CellParameters::Tetragonal { a, c } => shape_tensor_3d(a, a, c, HALF_PI, HALF_PI, HALF_PI),
+            CellParameters::Orthorhombic { a, b, c } => shape_tensor_3d(a, b, c, HALF_PI, HALF_PI, HALF_PI),
+            CellParameters::Rhombohedral { a, alpha } => shape_tensor_3d(a, a, a, alpha, alpha, alpha),
+            CellParameters::Hexagonal3D { a, c } => shape_tensor_3d(a, a, c, HALF_PI, HALF_PI, THIRD_PI),
+            CellParameters::Monoclinic { a, b, c, beta } => shape_tensor_3d(a, b, c, HALF_PI, beta, HALF_PI),
+            CellParameters::Triclinic {
                 a,
                 b,
                 c,
@@ -151,7 +177,7 @@ pub struct UnitCell {
 impl UnitCell {
     // Constructors
     pub fn new(parameters: CellParameters) -> Result<Self> {
-        let shape = parameters.into_shape_tensor();
+        let shape: Array2<f64> = parameters.into();
         let metric = shape.t().dot(&shape);
         let shape_inv = shape.inv()?;
         let metric_inv = metric.inv()?;
