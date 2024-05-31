@@ -1,5 +1,5 @@
 use fts::domain::{Mesh, UnitCell};
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple};
 
 use crate::error::ToPyResult;
 
@@ -18,8 +18,22 @@ impl PyMesh {
 #[pymethods]
 impl PyMesh {
     #[new]
-    fn __new__() -> PyResult<Self> {
-        todo!()
+    #[pyo3(signature = (*dimensions))]
+    fn __new__(dimensions: &Bound<'_, PyTuple>) -> PyResult<Self> {
+        let dimensions: Vec<usize> = dimensions.extract()?;
+        let mesh = match dimensions[..] {
+            [] => Err(PyValueError::new_err("dimensions are empty")),
+            [nx] => Ok(Mesh::One(nx)),
+            [nx, ny] => Ok(Mesh::Two(nx, ny)),
+            [nx, ny, nz] => Ok(Mesh::Three(nx, ny, nz)),
+            _ => Err(PyValueError::new_err("more than 3 dimensions provided")),
+        };
+        mesh.map(|m| Self::new(m))
+    }
+
+    #[getter]
+    fn get_size(&self) -> usize {
+        self.core.size()
     }
 }
 
