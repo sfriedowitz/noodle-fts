@@ -1,6 +1,6 @@
 use crate::{
     domain::{Mesh, FFT},
-    fields::{CField, FieldExt, RField},
+    fields::{CField, FieldOps, RField},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

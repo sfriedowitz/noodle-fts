@@ -2,7 +2,7 @@ use super::{propagator::PropagatorDirection, Propagator, PropagatorStep, StepMet
 use crate::{
     chem::Block,
     domain::Mesh,
-    fields::{FieldExt, RField},
+    fields::{FieldOps, RField},
 };
 
 #[derive(Debug)]

@@ -1,0 +1,491 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="406" onload="init(evt)" viewBox="0 0 1200 406" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:fg="http://github.com/jonhoo/inferno"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:monospace; font-size:12px }
+#title { text-anchor:middle; font-size:17px; }
+#matched { text-anchor:end; }
+#search { text-anchor:end; opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[
+        var nametype = 'Function:';
+        var fontsize = 12;
+        var fontwidth = 0.59;
+        var xpad = 10;
+        var inverted = false;
+        var searchcolor = 'rgb(230,0,230)';
+        var fluiddrawing = true;
+        var truncate_text_right = false;
+    ]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames, known_font_width;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    known_font_width = get_monospace_width(frames);
+    total_samples = parseInt(frames.attributes.total_samples.value);
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[*|x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+            svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            update_text_for_elements(frames.children);
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad;
+            matchedtxt.attributes.x.value = svgWidth - xpad;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes["fg:x"]) {
+            var params = get_params()
+            params.x = el.attributes["fg:x"].value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["fg:orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("fg:orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["fg:orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["fg:orig_" + attr].value;
+    e.removeAttribute("fg:orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function get_monospace_width(frames) {
+    // Given the id="frames" element, return the width of text characters if
+    // this is a monospace font, otherwise return 0.
+    text = find_child(frames.children[0], "text");
+    originalContent = text.textContent;
+    text.textContent = "!";
+    bangWidth = text.getComputedTextLength();
+    text.textContent = "W";
+    wWidth = text.getComputedTextLength();
+    text.textContent = originalContent;
+    if (bangWidth === wWidth) {
+        return bangWidth;
+    } else {
+        return 0;
+    }
+}
+function update_text_for_elements(elements) {
+    // In order to render quickly in the browser, you want to do one pass of
+    // reading attributes, and one pass of mutating attributes. See
+    // https://web.dev/avoid-large-complex-layouts-and-layout-thrashing/ for details.
+
+    // Fall back to inefficient calculation, if we're variable-width font.
+    // TODO This should be optimized somehow too.
+    if (known_font_width === 0) {
+        for (var i = 0; i < elements.length; i++) {
+            update_text(elements[i]);
+        }
+        return;
+    }
+
+    var textElemNewAttributes = [];
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var r = find_child(e, "rect");
+        var t = find_child(e, "text");
+        var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+        var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+        var newX = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+        // Smaller than this size won't fit anything
+        if (w < 2 * known_font_width) {
+            textElemNewAttributes.push([newX, ""]);
+            continue;
+        }
+
+        // Fit in full text width
+        if (txt.length * known_font_width < w) {
+            textElemNewAttributes.push([newX, txt]);
+            continue;
+        }
+
+        var substringLength = Math.floor(w / known_font_width) - 2;
+        if (truncate_text_right) {
+            // Truncate the right side of the text.
+            textElemNewAttributes.push([newX, txt.substring(0, substringLength) + ".."]);
+            continue;
+        } else {
+            // Truncate the left side of the text.
+            textElemNewAttributes.push([newX, ".." + txt.substring(txt.length - substringLength, txt.length)]);
+            continue;
+        }
+    }
+
+    console.assert(textElemNewAttributes.length === elements.length, "Resize failed, please file a bug at https://github.com/jonhoo/inferno/");
+
+    // Now that we know new textContent, set it all in one go so we don't refresh a bazillion times.
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var values = textElemNewAttributes[i];
+        var t = find_child(e, "text");
+        t.attributes.x.value = values[0];
+        t.textContent = values[1];
+    }
+}
+
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * parseInt(e.attributes["fg:x"].value) / total_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / total_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, zoomed_width_samples) {
+    if (e.tagName == "text") {
+        var parent_x = parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value);
+        e.attributes.x.value = format_percent(parent_x + (100 * 3 / frames.attributes.width.value));
+    } else if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * (parseInt(e.attributes["fg:x"].value) - x) / zoomed_width_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / zoomed_width_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, zoomed_width_samples);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseInt(attr["fg:w"].value);
+    var xmin = parseInt(attr["fg:x"].value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    var to_update_text = [];
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseInt(a["fg:x"].value);
+        var ew = parseInt(a["fg:w"].value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                to_update_text.push(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, width);
+                to_update_text.push(e);
+            }
+        }
+    }
+    update_text_for_elements(to_update_text);
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+    }
+    update_text_for_elements(el);
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        // Skip over frames which are either not visible, or below the zoomed-to frame
+        if (e.classList.contains("hide") || e.classList.contains("parent")) {
+            continue;
+        }
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseInt(rect.attributes["fg:w"].value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseInt(rect.attributes["fg:x"].value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    for (var k in keys) {
+        var x = parseInt(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="406" fill="url(#background)"/><text id="title" fill="rgb(0,0,0)" x="50.0000%" y="24.00">Flame Graph</text><text id="details" fill="rgb(0,0,0)" x="10" y="389.00"> </text><text id="unzoom" class="hide" fill="rgb(0,0,0)" x="10" y="24.00">Reset Zoom</text><text id="search" fill="rgb(0,0,0)" x="1190" y="24.00">Search</text><text id="matched" fill="rgb(0,0,0)" x="1190" y="389.00"> </text><svg id="frames" x="10" width="1180" total_samples="59669"><g><title>fts`fts::solvers::block::BlockSolver::compute_partition (8 samples, 0.01%)</title><rect x="0.0067%" y="181" width="0.0134%" height="15" fill="rgb(227,0,7)" fg:x="4" fg:w="8"/><text x="0.2567%" y="191.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::fold (8 samples, 0.01%)</title><rect x="0.0067%" y="165" width="0.0134%" height="15" fill="rgb(217,0,24)" fg:x="4" fg:w="8"/><text x="0.2567%" y="175.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::map_inplace (7 samples, 0.01%)</title><rect x="0.0218%" y="165" width="0.0117%" height="15" fill="rgb(221,193,54)" fg:x="13" fg:w="7"/><text x="0.2718%" y="175.50"></text></g><g><title>fts`fts::solvers::block::BlockSolver::update_concentration (243 samples, 0.41%)</title><rect x="0.0201%" y="181" width="0.4072%" height="15" fill="rgb(248,212,6)" fg:x="12" fg:w="243"/><text x="0.2701%" y="191.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2,P3),D&gt;::for_each (234 samples, 0.39%)</title><rect x="0.0352%" y="165" width="0.3922%" height="15" fill="rgb(208,68,35)" fg:x="21" fg:w="234"/><text x="0.2852%" y="175.50"></text></g><g><title>fts`ndarray::dimension::dimension_trait::Dimension::default_strides (13 samples, 0.02%)</title><rect x="3.8093%" y="117" width="0.0218%" height="15" fill="rgb(232,128,0)" fg:x="2273" fg:w="13"/><text x="4.0593%" y="127.50"></text></g><g><title>fts`ndarray::dimension::dimension_trait::Dimension::is_contiguous (16 samples, 0.03%)</title><rect x="3.8060%" y="133" width="0.0268%" height="15" fill="rgb(207,160,47)" fg:x="2271" fg:w="16"/><text x="4.0560%" y="143.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (2,024 samples, 3.39%)</title><rect x="0.4424%" y="149" width="3.3920%" height="15" fill="rgb(228,23,34)" fg:x="264" fg:w="2024"/><text x="0.6924%" y="159.50">fts..</text></g><g><title>fts`DYLD-STUB$$free (47 samples, 0.08%)</title><rect x="3.8412%" y="133" width="0.0788%" height="15" fill="rgb(218,30,26)" fg:x="2292" fg:w="47"/><text x="4.0912%" y="143.50"></text></g><g><title>fts`ndarray::ArrayBase&lt;S,D&gt;::try_remove_axis (8 samples, 0.01%)</title><rect x="3.9283%" y="101" width="0.0134%" height="15" fill="rgb(220,122,19)" fg:x="2344" fg:w="8"/><text x="4.1783%" y="111.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::rows (13 samples, 0.02%)</title><rect x="3.9216%" y="133" width="0.0218%" height="15" fill="rgb(250,228,42)" fg:x="2340" fg:w="13"/><text x="4.1716%" y="143.50"></text></g><g><title>fts`ndarray::iterators::lanes::Lanes&lt;A,D&gt;::new (9 samples, 0.02%)</title><rect x="3.9283%" y="117" width="0.0151%" height="15" fill="rgb(240,193,28)" fg:x="2344" fg:w="9"/><text x="4.1783%" y="127.50"></text></g><g><title>fts`ndarray::ArrayBase&lt;S,D&gt;::try_remove_axis (6 samples, 0.01%)</title><rect x="3.9468%" y="101" width="0.0101%" height="15" fill="rgb(216,20,37)" fg:x="2355" fg:w="6"/><text x="4.1968%" y="111.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::rows_mut (9 samples, 0.02%)</title><rect x="3.9434%" y="133" width="0.0151%" height="15" fill="rgb(206,188,39)" fg:x="2353" fg:w="9"/><text x="4.1934%" y="143.50"></text></g><g><title>fts`ndarray::iterators::lanes::LanesMut&lt;A,D&gt;::new (8 samples, 0.01%)</title><rect x="3.9451%" y="117" width="0.0134%" height="15" fill="rgb(217,207,13)" fg:x="2354" fg:w="8"/><text x="4.1951%" y="127.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (55 samples, 0.09%)</title><rect x="3.9619%" y="133" width="0.0922%" height="15" fill="rgb(231,73,38)" fg:x="2364" fg:w="55"/><text x="4.2119%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P,),D&gt;::from (10 samples, 0.02%)</title><rect x="4.0540%" y="133" width="0.0168%" height="15" fill="rgb(225,20,46)" fg:x="2419" fg:w="10"/><text x="4.3040%" y="143.50"></text></g><g><title>fts`ndarray::zip::array_layout (8 samples, 0.01%)</title><rect x="4.0574%" y="117" width="0.0134%" height="15" fill="rgb(210,31,41)" fg:x="2421" fg:w="8"/><text x="4.3074%" y="127.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (255 samples, 0.43%)</title><rect x="4.0775%" y="133" width="0.4274%" height="15" fill="rgb(221,200,47)" fg:x="2433" fg:w="255"/><text x="4.3275%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each::_{{closure}} (73 samples, 0.12%)</title><rect x="4.5049%" y="133" width="0.1223%" height="15" fill="rgb(226,26,5)" fg:x="2688" fg:w="73"/><text x="4.7549%" y="143.50"></text></g><g><title>fts`DYLD-STUB$$free (61 samples, 0.10%)</title><rect x="4.6272%" y="117" width="0.1022%" height="15" fill="rgb(249,33,26)" fg:x="2761" fg:w="61"/><text x="4.8772%" y="127.50"></text></g><g><title>fts`DYLD-STUB$$malloc (22 samples, 0.04%)</title><rect x="4.7294%" y="117" width="0.0369%" height="15" fill="rgb(235,183,28)" fg:x="2822" fg:w="22"/><text x="4.9794%" y="127.50"></text></g><g><title>fts`DYLD-STUB$$memcpy (21 samples, 0.04%)</title><rect x="4.7663%" y="117" width="0.0352%" height="15" fill="rgb(221,5,38)" fg:x="2844" fg:w="21"/><text x="5.0163%" y="127.50"></text></g><g><title>fts`__rdl_alloc (23 samples, 0.04%)</title><rect x="4.8015%" y="117" width="0.0385%" height="15" fill="rgb(247,18,42)" fg:x="2865" fg:w="23"/><text x="5.0515%" y="127.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (734 samples, 1.23%)</title><rect x="4.8400%" y="117" width="1.2301%" height="15" fill="rgb(241,131,45)" fg:x="2888" fg:w="734"/><text x="5.0900%" y="127.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (667 samples, 1.12%)</title><rect x="4.9523%" y="101" width="1.1178%" height="15" fill="rgb(249,31,29)" fg:x="2955" fg:w="667"/><text x="5.2023%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`rack_get_thread_index (121 samples, 0.20%)</title><rect x="7.5768%" y="85" width="0.2028%" height="15" fill="rgb(225,111,53)" fg:x="4521" fg:w="121"/><text x="7.8268%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (52 samples, 0.09%)</title><rect x="7.7796%" y="85" width="0.0871%" height="15" fill="rgb(238,160,17)" fg:x="4642" fg:w="52"/><text x="8.0296%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (14 samples, 0.02%)</title><rect x="8.1298%" y="69" width="0.0235%" height="15" fill="rgb(214,148,48)" fg:x="4851" fg:w="14"/><text x="8.3798%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`set_tiny_meta_header_in_use (154 samples, 0.26%)</title><rect x="8.1533%" y="69" width="0.2581%" height="15" fill="rgb(232,36,49)" fg:x="4865" fg:w="154"/><text x="8.4033%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (62 samples, 0.10%)</title><rect x="8.6444%" y="53" width="0.1039%" height="15" fill="rgb(209,103,24)" fg:x="5158" fg:w="62"/><text x="8.8944%" y="63.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (784 samples, 1.31%)</title><rect x="7.4377%" y="101" width="1.3139%" height="15" fill="rgb(229,88,8)" fg:x="4438" fg:w="784"/><text x="7.6877%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (528 samples, 0.88%)</title><rect x="7.8667%" y="85" width="0.8849%" height="15" fill="rgb(213,181,19)" fg:x="4694" fg:w="528"/><text x="8.1167%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (203 samples, 0.34%)</title><rect x="8.4114%" y="69" width="0.3402%" height="15" fill="rgb(254,191,54)" fg:x="5019" fg:w="203"/><text x="8.6614%" y="79.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (1,644 samples, 2.76%)</title><rect x="6.0702%" y="117" width="2.7552%" height="15" fill="rgb(241,83,37)" fg:x="3622" fg:w="1644"/><text x="6.3202%" y="127.50">ft..</text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (44 samples, 0.07%)</title><rect x="8.7516%" y="101" width="0.0737%" height="15" fill="rgb(233,36,39)" fg:x="5222" fg:w="44"/><text x="9.0016%" y="111.50"></text></g><g><title>fts`DYLD-STUB$$malloc (34 samples, 0.06%)</title><rect x="9.1103%" y="101" width="0.0570%" height="15" fill="rgb(226,3,54)" fg:x="5436" fg:w="34"/><text x="9.3603%" y="111.50"></text></g><g><title>fts`DYLD-STUB$$memcpy (12 samples, 0.02%)</title><rect x="9.1672%" y="101" width="0.0201%" height="15" fill="rgb(245,192,40)" fg:x="5470" fg:w="12"/><text x="9.4172%" y="111.50"></text></g><g><title>fts`__rdl_alloc (17 samples, 0.03%)</title><rect x="9.1874%" y="101" width="0.0285%" height="15" fill="rgb(238,167,29)" fg:x="5482" fg:w="17"/><text x="9.4374%" y="111.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (808 samples, 1.35%)</title><rect x="9.2158%" y="101" width="1.3541%" height="15" fill="rgb(232,182,51)" fg:x="5499" fg:w="808"/><text x="9.4658%" y="111.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (736 samples, 1.23%)</title><rect x="9.3365%" y="85" width="1.2335%" height="15" fill="rgb(231,60,39)" fg:x="5571" fg:w="736"/><text x="9.5865%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`rack_get_thread_index (155 samples, 0.26%)</title><rect x="11.9844%" y="69" width="0.2598%" height="15" fill="rgb(208,69,12)" fg:x="7151" fg:w="155"/><text x="12.2344%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (40 samples, 0.07%)</title><rect x="12.2442%" y="69" width="0.0670%" height="15" fill="rgb(235,93,37)" fg:x="7306" fg:w="40"/><text x="12.4942%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (19 samples, 0.03%)</title><rect x="12.6129%" y="53" width="0.0318%" height="15" fill="rgb(213,116,39)" fg:x="7526" fg:w="19"/><text x="12.8629%" y="63.50"></text></g><g><title>libsystem_malloc.dylib`set_tiny_meta_header_in_use (161 samples, 0.27%)</title><rect x="12.6448%" y="53" width="0.2698%" height="15" fill="rgb(222,207,29)" fg:x="7545" fg:w="161"/><text x="12.8948%" y="63.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (57 samples, 0.10%)</title><rect x="13.1626%" y="37" width="0.0955%" height="15" fill="rgb(206,96,30)" fg:x="7854" fg:w="57"/><text x="13.4126%" y="47.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (831 samples, 1.39%)</title><rect x="11.8688%" y="85" width="1.3927%" height="15" fill="rgb(218,138,4)" fg:x="7082" fg:w="831"/><text x="12.1188%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (567 samples, 0.95%)</title><rect x="12.3113%" y="69" width="0.9502%" height="15" fill="rgb(250,191,14)" fg:x="7346" fg:w="567"/><text x="12.5613%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (207 samples, 0.35%)</title><rect x="12.9146%" y="53" width="0.3469%" height="15" fill="rgb(239,60,40)" fg:x="7706" fg:w="207"/><text x="13.1646%" y="63.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (1,657 samples, 2.78%)</title><rect x="10.5700%" y="101" width="2.7770%" height="15" fill="rgb(206,27,48)" fg:x="6307" fg:w="1657"/><text x="10.8200%" y="111.50">ft..</text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (51 samples, 0.09%)</title><rect x="13.2615%" y="85" width="0.0855%" height="15" fill="rgb(225,35,8)" fg:x="7913" fg:w="51"/><text x="13.5115%" y="95.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::fft_lane (150 samples, 0.25%)</title><rect x="13.3470%" y="101" width="0.2514%" height="15" fill="rgb(250,213,24)" fg:x="7964" fg:w="150"/><text x="13.5970%" y="111.50"></text></g><g><title>fts`rustfft::Fft::process (23 samples, 0.04%)</title><rect x="13.5984%" y="101" width="0.0385%" height="15" fill="rgb(247,123,22)" fg:x="8114" fg:w="23"/><text x="13.8484%" y="111.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks (2,824 samples, 4.73%)</title><rect x="13.6369%" y="101" width="4.7328%" height="15" fill="rgb(231,138,38)" fg:x="8137" fg:w="2824"/><text x="13.8869%" y="111.50">fts`ru..</text></g><g><title>libsystem_malloc.dylib`DYLD-STUB$$_platform_memset (13 samples, 0.02%)</title><rect x="18.3697%" y="101" width="0.0218%" height="15" fill="rgb(231,145,46)" fg:x="10961" fg:w="13"/><text x="18.6197%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`_malloc_zone_malloc (171 samples, 0.29%)</title><rect x="18.3915%" y="101" width="0.2866%" height="15" fill="rgb(251,118,11)" fg:x="10974" fg:w="171"/><text x="18.6415%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (31 samples, 0.05%)</title><rect x="18.6780%" y="101" width="0.0520%" height="15" fill="rgb(217,147,25)" fg:x="11145" fg:w="31"/><text x="18.9280%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (55 samples, 0.09%)</title><rect x="18.7300%" y="101" width="0.0922%" height="15" fill="rgb(247,81,37)" fg:x="11176" fg:w="55"/><text x="18.9800%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`get_tiny_previous_free_msize (75 samples, 0.13%)</title><rect x="19.4322%" y="85" width="0.1257%" height="15" fill="rgb(209,12,38)" fg:x="11595" fg:w="75"/><text x="19.6822%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_list_add_ptr (207 samples, 0.35%)</title><rect x="19.9735%" y="69" width="0.3469%" height="15" fill="rgb(227,1,9)" fg:x="11918" fg:w="207"/><text x="20.2235%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (895 samples, 1.50%)</title><rect x="18.8222%" y="101" width="1.4999%" height="15" fill="rgb(248,47,43)" fg:x="11231" fg:w="895"/><text x="19.0722%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (456 samples, 0.76%)</title><rect x="19.5579%" y="85" width="0.7642%" height="15" fill="rgb(221,10,30)" fg:x="11670" fg:w="456"/><text x="19.8079%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`nanov2_malloc (20 samples, 0.03%)</title><rect x="20.3221%" y="101" width="0.0335%" height="15" fill="rgb(210,229,1)" fg:x="12126" fg:w="20"/><text x="20.5721%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (11 samples, 0.02%)</title><rect x="20.3556%" y="101" width="0.0184%" height="15" fill="rgb(222,148,37)" fg:x="12146" fg:w="11"/><text x="20.6056%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (66 samples, 0.11%)</title><rect x="20.3741%" y="101" width="0.1106%" height="15" fill="rgb(234,67,33)" fg:x="12157" fg:w="66"/><text x="20.6241%" y="111.50"></text></g><g><title>libsystem_platform.dylib`_platform_memmove (659 samples, 1.10%)</title><rect x="20.4847%" y="101" width="1.1044%" height="15" fill="rgb(247,98,35)" fg:x="12223" fg:w="659"/><text x="20.7347%" y="111.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each::_{{closure}} (7,759 samples, 13.00%)</title><rect x="8.8254%" y="117" width="13.0034%" height="15" fill="rgb(247,138,52)" fg:x="5266" fg:w="7759"/><text x="9.0754%" y="127.50">fts`ndarray::zip::Zi..</text></g><g><title>libsystem_platform.dylib`_platform_memset (143 samples, 0.24%)</title><rect x="21.5891%" y="101" width="0.2397%" height="15" fill="rgb(213,79,30)" fg:x="12882" fg:w="143"/><text x="21.8391%" y="111.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::fft_lane (190 samples, 0.32%)</title><rect x="21.8288%" y="117" width="0.3184%" height="15" fill="rgb(246,177,23)" fg:x="13025" fg:w="190"/><text x="22.0788%" y="127.50"></text></g><g><title>fts`rustfft::Fft::process (75 samples, 0.13%)</title><rect x="22.1472%" y="117" width="0.1257%" height="15" fill="rgb(230,62,27)" fg:x="13215" fg:w="75"/><text x="22.3972%" y="127.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks (2,823 samples, 4.73%)</title><rect x="22.2729%" y="117" width="4.7311%" height="15" fill="rgb(216,154,8)" fg:x="13290" fg:w="2823"/><text x="22.5229%" y="127.50">fts`ru..</text></g><g><title>libsystem_malloc.dylib`DYLD-STUB$$_platform_memset (25 samples, 0.04%)</title><rect x="27.0040%" y="117" width="0.0419%" height="15" fill="rgb(244,35,45)" fg:x="16113" fg:w="25"/><text x="27.2540%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_free (141 samples, 0.24%)</title><rect x="27.0459%" y="117" width="0.2363%" height="15" fill="rgb(251,115,12)" fg:x="16138" fg:w="141"/><text x="27.2959%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_malloc_zone_malloc (174 samples, 0.29%)</title><rect x="27.2822%" y="117" width="0.2916%" height="15" fill="rgb(240,54,50)" fg:x="16279" fg:w="174"/><text x="27.5322%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (73 samples, 0.12%)</title><rect x="27.5738%" y="117" width="0.1223%" height="15" fill="rgb(233,84,52)" fg:x="16453" fg:w="73"/><text x="27.8238%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (130 samples, 0.22%)</title><rect x="27.6961%" y="117" width="0.2179%" height="15" fill="rgb(207,117,47)" fg:x="16526" fg:w="130"/><text x="27.9461%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`get_tiny_previous_free_msize (50 samples, 0.08%)</title><rect x="28.5659%" y="101" width="0.0838%" height="15" fill="rgb(249,43,39)" fg:x="17045" fg:w="50"/><text x="28.8159%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_list_add_ptr (206 samples, 0.35%)</title><rect x="29.0486%" y="85" width="0.3452%" height="15" fill="rgb(209,38,44)" fg:x="17333" fg:w="206"/><text x="29.2986%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (887 samples, 1.49%)</title><rect x="27.9140%" y="117" width="1.4865%" height="15" fill="rgb(236,212,23)" fg:x="16656" fg:w="887"/><text x="28.1640%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (448 samples, 0.75%)</title><rect x="28.6497%" y="101" width="0.7508%" height="15" fill="rgb(242,79,21)" fg:x="17095" fg:w="448"/><text x="28.8997%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`nanov2_malloc (27 samples, 0.05%)</title><rect x="29.4005%" y="117" width="0.0452%" height="15" fill="rgb(211,96,35)" fg:x="17543" fg:w="27"/><text x="29.6505%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (27 samples, 0.05%)</title><rect x="29.4458%" y="117" width="0.0452%" height="15" fill="rgb(253,215,40)" fg:x="17570" fg:w="27"/><text x="29.6958%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (71 samples, 0.12%)</title><rect x="29.4910%" y="117" width="0.1190%" height="15" fill="rgb(211,81,21)" fg:x="17597" fg:w="71"/><text x="29.7410%" y="127.50"></text></g><g><title>libsystem_platform.dylib`_platform_memmove (468 samples, 0.78%)</title><rect x="29.6100%" y="117" width="0.7843%" height="15" fill="rgb(208,190,38)" fg:x="17668" fg:w="468"/><text x="29.8600%" y="127.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (15,517 samples, 26.01%)</title><rect x="4.6272%" y="133" width="26.0051%" height="15" fill="rgb(235,213,38)" fg:x="2761" fg:w="15517"/><text x="4.8772%" y="143.50">fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each</text></g><g><title>libsystem_platform.dylib`_platform_memset (142 samples, 0.24%)</title><rect x="30.3943%" y="117" width="0.2380%" height="15" fill="rgb(237,122,38)" fg:x="18136" fg:w="142"/><text x="30.6443%" y="127.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::fft_lane (44 samples, 0.07%)</title><rect x="30.6323%" y="133" width="0.0737%" height="15" fill="rgb(244,218,35)" fg:x="18278" fg:w="44"/><text x="30.8823%" y="143.50"></text></g><g><title>fts`rustfft::Fft::process (21 samples, 0.04%)</title><rect x="30.7061%" y="133" width="0.0352%" height="15" fill="rgb(240,68,47)" fg:x="18322" fg:w="21"/><text x="30.9561%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_free (186 samples, 0.31%)</title><rect x="30.7413%" y="133" width="0.3117%" height="15" fill="rgb(210,16,53)" fg:x="18343" fg:w="186"/><text x="30.9913%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (50 samples, 0.08%)</title><rect x="31.0530%" y="133" width="0.0838%" height="15" fill="rgb(235,124,12)" fg:x="18529" fg:w="50"/><text x="31.3030%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (53 samples, 0.09%)</title><rect x="31.1368%" y="133" width="0.0888%" height="15" fill="rgb(224,169,11)" fg:x="18579" fg:w="53"/><text x="31.3868%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (23 samples, 0.04%)</title><rect x="31.2256%" y="133" width="0.0385%" height="15" fill="rgb(250,166,2)" fg:x="18632" fg:w="23"/><text x="31.4756%" y="143.50"></text></g><g><title>fts`ndrustfft::ndfft (16,380 samples, 27.45%)</title><rect x="3.8345%" y="149" width="27.4514%" height="15" fill="rgb(242,216,29)" fg:x="2288" fg:w="16380"/><text x="4.0845%" y="159.50">fts`ndrustfft::ndfft</text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (13 samples, 0.02%)</title><rect x="31.2641%" y="133" width="0.0218%" height="15" fill="rgb(230,116,27)" fg:x="18655" fg:w="13"/><text x="31.5141%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (12 samples, 0.02%)</title><rect x="31.2658%" y="117" width="0.0201%" height="15" fill="rgb(228,99,48)" fg:x="18656" fg:w="12"/><text x="31.5158%" y="127.50"></text></g><g><title>fts`DYLD-STUB$$free (59 samples, 0.10%)</title><rect x="31.2893%" y="133" width="0.0989%" height="15" fill="rgb(253,11,6)" fg:x="18670" fg:w="59"/><text x="31.5393%" y="143.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::rows (6 samples, 0.01%)</title><rect x="31.3898%" y="133" width="0.0101%" height="15" fill="rgb(247,143,39)" fg:x="18730" fg:w="6"/><text x="31.6398%" y="143.50"></text></g><g><title>fts`&lt;realfft::RealToComplexEven&lt;T&gt; as realfft::RealToComplex&lt;T&gt;&gt;::process (71 samples, 0.12%)</title><rect x="31.5792%" y="117" width="0.1190%" height="15" fill="rgb(236,97,10)" fg:x="18843" fg:w="71"/><text x="31.8292%" y="127.50"></text></g><g><title>fts`DYLD-STUB$$calloc (39 samples, 0.07%)</title><rect x="31.6982%" y="117" width="0.0654%" height="15" fill="rgb(233,208,19)" fg:x="18914" fg:w="39"/><text x="31.9482%" y="127.50"></text></g><g><title>fts`__rdl_alloc_zeroed (27 samples, 0.05%)</title><rect x="31.7719%" y="117" width="0.0452%" height="15" fill="rgb(216,164,2)" fg:x="18958" fg:w="27"/><text x="32.0219%" y="127.50"></text></g><g><title>fts`__rdl_dealloc (31 samples, 0.05%)</title><rect x="31.8172%" y="117" width="0.0520%" height="15" fill="rgb(220,129,5)" fg:x="18985" fg:w="31"/><text x="32.0672%" y="127.50"></text></g><g><title>fts`&lt;rustfft::neon::neon_butterflies::NeonF64Butterfly16&lt;T&gt; as rustfft::Fft&lt;T&gt;&gt;::process_outofplace_with_scratch (31 samples, 0.05%)</title><rect x="34.7148%" y="69" width="0.0520%" height="15" fill="rgb(242,17,10)" fg:x="20714" fg:w="31"/><text x="34.9648%" y="79.50"></text></g><g><title>fts`&lt;realfft::RealToComplexEven&lt;T&gt; as realfft::RealToComplex&lt;T&gt;&gt;::process_with_scratch (3,406 samples, 5.71%)</title><rect x="32.4859%" y="85" width="5.7082%" height="15" fill="rgb(242,107,0)" fg:x="19384" fg:w="3406"/><text x="32.7359%" y="95.50">fts`&lt;re..</text></g><g><title>fts`rustfft::array_utils::iter_chunks_zipped (2,045 samples, 3.43%)</title><rect x="34.7668%" y="69" width="3.4272%" height="15" fill="rgb(251,28,31)" fg:x="20745" fg:w="2045"/><text x="35.0168%" y="79.50">fts..</text></g><g><title>fts`&lt;realfft::RealToComplexEven&lt;T&gt; as realfft::RealToComplex&lt;T&gt;&gt;::process (3,564 samples, 5.97%)</title><rect x="32.3686%" y="101" width="5.9730%" height="15" fill="rgb(233,223,10)" fg:x="19314" fg:w="3564"/><text x="32.6186%" y="111.50">fts`&lt;rea..</text></g><g><title>fts`&lt;rustfft::neon::neon_butterflies::NeonF64Butterfly16&lt;T&gt; as rustfft::Fft&lt;T&gt;&gt;::process_outofplace_with_scratch (88 samples, 0.15%)</title><rect x="38.1940%" y="85" width="0.1475%" height="15" fill="rgb(215,21,27)" fg:x="22790" fg:w="88"/><text x="38.4440%" y="95.50"></text></g><g><title>fts`&lt;realfft::RealToComplexEven&lt;T&gt; as realfft::RealToComplex&lt;T&gt;&gt;::process_with_scratch (110 samples, 0.18%)</title><rect x="38.3415%" y="101" width="0.1844%" height="15" fill="rgb(232,23,21)" fg:x="22878" fg:w="110"/><text x="38.5915%" y="111.50"></text></g><g><title>fts`ndrustfft::R2cFftHandler&lt;T&gt;::fft_r2c_lane (4,438 samples, 7.44%)</title><rect x="31.8708%" y="117" width="7.4377%" height="15" fill="rgb(244,5,23)" fg:x="19017" fg:w="4438"/><text x="32.1208%" y="127.50">fts`ndrust..</text></g><g><title>libsystem_malloc.dylib`nanov2_calloc (467 samples, 0.78%)</title><rect x="38.5259%" y="101" width="0.7827%" height="15" fill="rgb(226,81,46)" fg:x="22988" fg:w="467"/><text x="38.7759%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`DYLD-STUB$$_platform_bzero (38 samples, 0.06%)</title><rect x="39.3085%" y="117" width="0.0637%" height="15" fill="rgb(247,70,30)" fg:x="23455" fg:w="38"/><text x="39.5585%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_malloc_zone_calloc (249 samples, 0.42%)</title><rect x="39.3722%" y="117" width="0.4173%" height="15" fill="rgb(212,68,19)" fg:x="23493" fg:w="249"/><text x="39.6222%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (530 samples, 0.89%)</title><rect x="39.7895%" y="117" width="0.8882%" height="15" fill="rgb(240,187,13)" fg:x="23742" fg:w="530"/><text x="40.0395%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`nanov2_calloc (43 samples, 0.07%)</title><rect x="40.6777%" y="117" width="0.0721%" height="15" fill="rgb(223,113,26)" fg:x="24272" fg:w="43"/><text x="40.9277%" y="127.50"></text></g><g><title>libsystem_platform.dylib`__bzero (39 samples, 0.07%)</title><rect x="40.7498%" y="117" width="0.0654%" height="15" fill="rgb(206,192,2)" fg:x="24315" fg:w="39"/><text x="40.9998%" y="127.50"></text></g><g><title>libsystem_platform.dylib`_platform_memmove (264 samples, 0.44%)</title><rect x="40.8152%" y="117" width="0.4424%" height="15" fill="rgb(241,108,4)" fg:x="24354" fg:w="264"/><text x="41.0652%" y="127.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (5,942 samples, 9.96%)</title><rect x="31.4116%" y="133" width="9.9583%" height="15" fill="rgb(247,173,49)" fg:x="18743" fg:w="5942"/><text x="31.6616%" y="143.50">fts`ndarray::z..</text></g><g><title>libsystem_platform.dylib`_platform_memset (67 samples, 0.11%)</title><rect x="41.2576%" y="117" width="0.1123%" height="15" fill="rgb(224,114,35)" fg:x="24618" fg:w="67"/><text x="41.5076%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_free (283 samples, 0.47%)</title><rect x="41.3699%" y="133" width="0.4743%" height="15" fill="rgb(245,159,27)" fg:x="24685" fg:w="283"/><text x="41.6199%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (50 samples, 0.08%)</title><rect x="41.8442%" y="133" width="0.0838%" height="15" fill="rgb(245,172,44)" fg:x="24968" fg:w="50"/><text x="42.0942%" y="143.50"></text></g><g><title>fts`ndrustfft::ndfft_r2c (6,351 samples, 10.64%)</title><rect x="31.2859%" y="149" width="10.6437%" height="15" fill="rgb(236,23,11)" fg:x="18668" fg:w="6351"/><text x="31.5359%" y="159.50">fts`ndrustfft::n..</text></g><g><title>fts`fts::domain::fft::FFT::forward (24,764 samples, 41.50%)</title><rect x="0.4290%" y="165" width="41.5023%" height="15" fill="rgb(205,117,38)" fg:x="256" fg:w="24764"/><text x="0.6790%" y="175.50">fts`fts::domain::fft::FFT::forward</text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (2,809 samples, 4.71%)</title><rect x="41.9397%" y="149" width="4.7076%" height="15" fill="rgb(237,72,25)" fg:x="25025" fg:w="2809"/><text x="42.1897%" y="159.50">fts`n..</text></g><g><title>fts`ndarray::dimension::dimension_trait::Dimension::is_contiguous (9 samples, 0.02%)</title><rect x="46.6323%" y="133" width="0.0151%" height="15" fill="rgb(244,70,9)" fg:x="27825" fg:w="9"/><text x="46.8823%" y="143.50"></text></g><g><title>fts`ndarray::dimension::dimension_trait::Dimension::default_strides (8 samples, 0.01%)</title><rect x="46.6339%" y="117" width="0.0134%" height="15" fill="rgb(217,125,39)" fg:x="27826" fg:w="8"/><text x="46.8839%" y="127.50"></text></g><g><title>fts`DYLD-STUB$$free (42 samples, 0.07%)</title><rect x="46.6540%" y="133" width="0.0704%" height="15" fill="rgb(235,36,10)" fg:x="27838" fg:w="42"/><text x="46.9040%" y="143.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (53 samples, 0.09%)</title><rect x="46.7429%" y="133" width="0.0888%" height="15" fill="rgb(251,123,47)" fg:x="27891" fg:w="53"/><text x="46.9929%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P,),D&gt;::from (7 samples, 0.01%)</title><rect x="46.8317%" y="133" width="0.0117%" height="15" fill="rgb(221,13,13)" fg:x="27944" fg:w="7"/><text x="47.0817%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,),D&gt;::and (9 samples, 0.02%)</title><rect x="46.8434%" y="133" width="0.0151%" height="15" fill="rgb(238,131,9)" fg:x="27951" fg:w="9"/><text x="47.0934%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (249 samples, 0.42%)</title><rect x="46.8585%" y="133" width="0.4173%" height="15" fill="rgb(211,50,8)" fg:x="27960" fg:w="249"/><text x="47.1085%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each::_{{closure}} (65 samples, 0.11%)</title><rect x="47.2758%" y="133" width="0.1089%" height="15" fill="rgb(245,182,24)" fg:x="28209" fg:w="65"/><text x="47.5258%" y="143.50"></text></g><g><title>fts`DYLD-STUB$$free (28 samples, 0.05%)</title><rect x="47.3847%" y="117" width="0.0469%" height="15" fill="rgb(242,14,37)" fg:x="28274" fg:w="28"/><text x="47.6347%" y="127.50"></text></g><g><title>fts`DYLD-STUB$$malloc (28 samples, 0.05%)</title><rect x="47.4317%" y="117" width="0.0469%" height="15" fill="rgb(246,228,12)" fg:x="28302" fg:w="28"/><text x="47.6817%" y="127.50"></text></g><g><title>fts`DYLD-STUB$$memcpy (39 samples, 0.07%)</title><rect x="47.4786%" y="117" width="0.0654%" height="15" fill="rgb(213,55,15)" fg:x="28330" fg:w="39"/><text x="47.7286%" y="127.50"></text></g><g><title>fts`__rdl_alloc (20 samples, 0.03%)</title><rect x="47.5440%" y="117" width="0.0335%" height="15" fill="rgb(209,9,3)" fg:x="28369" fg:w="20"/><text x="47.7940%" y="127.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (816 samples, 1.37%)</title><rect x="47.5791%" y="117" width="1.3675%" height="15" fill="rgb(230,59,30)" fg:x="28390" fg:w="816"/><text x="47.8291%" y="127.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (733 samples, 1.23%)</title><rect x="47.7182%" y="101" width="1.2284%" height="15" fill="rgb(209,121,21)" fg:x="28473" fg:w="733"/><text x="47.9682%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`rack_get_thread_index (138 samples, 0.23%)</title><rect x="50.3243%" y="85" width="0.2313%" height="15" fill="rgb(220,109,13)" fg:x="30028" fg:w="138"/><text x="50.5743%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (44 samples, 0.07%)</title><rect x="50.5556%" y="85" width="0.0737%" height="15" fill="rgb(232,18,1)" fg:x="30166" fg:w="44"/><text x="50.8056%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (13 samples, 0.02%)</title><rect x="50.9259%" y="69" width="0.0218%" height="15" fill="rgb(215,41,42)" fg:x="30387" fg:w="13"/><text x="51.1759%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`set_tiny_meta_header_in_use (155 samples, 0.26%)</title><rect x="50.9477%" y="69" width="0.2598%" height="15" fill="rgb(224,123,36)" fg:x="30400" fg:w="155"/><text x="51.1977%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (51 samples, 0.09%)</title><rect x="51.4254%" y="53" width="0.0855%" height="15" fill="rgb(240,125,3)" fg:x="30685" fg:w="51"/><text x="51.6754%" y="63.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (783 samples, 1.31%)</title><rect x="50.2019%" y="101" width="1.3122%" height="15" fill="rgb(205,98,50)" fg:x="29955" fg:w="783"/><text x="50.4519%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (528 samples, 0.88%)</title><rect x="50.6293%" y="85" width="0.8849%" height="15" fill="rgb(205,185,37)" fg:x="30210" fg:w="528"/><text x="50.8793%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (183 samples, 0.31%)</title><rect x="51.2075%" y="69" width="0.3067%" height="15" fill="rgb(238,207,15)" fg:x="30555" fg:w="183"/><text x="51.4575%" y="79.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (1,582 samples, 2.65%)</title><rect x="48.9467%" y="117" width="2.6513%" height="15" fill="rgb(213,199,42)" fg:x="29206" fg:w="1582"/><text x="49.1967%" y="127.50">ft..</text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (50 samples, 0.08%)</title><rect x="51.5142%" y="101" width="0.0838%" height="15" fill="rgb(235,201,11)" fg:x="30738" fg:w="50"/><text x="51.7642%" y="111.50"></text></g><g><title>fts`DYLD-STUB$$malloc (33 samples, 0.06%)</title><rect x="51.9047%" y="101" width="0.0553%" height="15" fill="rgb(207,46,11)" fg:x="30971" fg:w="33"/><text x="52.1547%" y="111.50"></text></g><g><title>fts`DYLD-STUB$$memcpy (16 samples, 0.03%)</title><rect x="51.9600%" y="101" width="0.0268%" height="15" fill="rgb(241,35,35)" fg:x="31004" fg:w="16"/><text x="52.2100%" y="111.50"></text></g><g><title>fts`__rdl_alloc (21 samples, 0.04%)</title><rect x="51.9868%" y="101" width="0.0352%" height="15" fill="rgb(243,32,47)" fg:x="31020" fg:w="21"/><text x="52.2368%" y="111.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (810 samples, 1.36%)</title><rect x="52.0220%" y="101" width="1.3575%" height="15" fill="rgb(247,202,23)" fg:x="31041" fg:w="810"/><text x="52.2720%" y="111.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (720 samples, 1.21%)</title><rect x="52.1728%" y="85" width="1.2067%" height="15" fill="rgb(219,102,11)" fg:x="31131" fg:w="720"/><text x="52.4228%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`rack_get_thread_index (156 samples, 0.26%)</title><rect x="54.7872%" y="69" width="0.2614%" height="15" fill="rgb(243,110,44)" fg:x="32691" fg:w="156"/><text x="55.0372%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (48 samples, 0.08%)</title><rect x="55.0487%" y="69" width="0.0804%" height="15" fill="rgb(222,74,54)" fg:x="32847" fg:w="48"/><text x="55.2987%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (18 samples, 0.03%)</title><rect x="55.4459%" y="53" width="0.0302%" height="15" fill="rgb(216,99,12)" fg:x="33084" fg:w="18"/><text x="55.6959%" y="63.50"></text></g><g><title>libsystem_malloc.dylib`set_tiny_meta_header_in_use (150 samples, 0.25%)</title><rect x="55.4760%" y="53" width="0.2514%" height="15" fill="rgb(226,22,26)" fg:x="33102" fg:w="150"/><text x="55.7260%" y="63.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (65 samples, 0.11%)</title><rect x="56.0123%" y="37" width="0.1089%" height="15" fill="rgb(217,163,10)" fg:x="33422" fg:w="65"/><text x="56.2623%" y="47.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (888 samples, 1.49%)</title><rect x="54.6347%" y="85" width="1.4882%" height="15" fill="rgb(213,25,53)" fg:x="32600" fg:w="888"/><text x="54.8847%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (593 samples, 0.99%)</title><rect x="55.1291%" y="69" width="0.9938%" height="15" fill="rgb(252,105,26)" fg:x="32895" fg:w="593"/><text x="55.3791%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (236 samples, 0.40%)</title><rect x="55.7274%" y="53" width="0.3955%" height="15" fill="rgb(220,39,43)" fg:x="33252" fg:w="236"/><text x="55.9774%" y="63.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (1,685 samples, 2.82%)</title><rect x="53.3795%" y="101" width="2.8239%" height="15" fill="rgb(229,68,48)" fg:x="31851" fg:w="1685"/><text x="53.6295%" y="111.50">ft..</text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (48 samples, 0.08%)</title><rect x="56.1229%" y="85" width="0.0804%" height="15" fill="rgb(252,8,32)" fg:x="33488" fg:w="48"/><text x="56.3729%" y="95.50"></text></g><g><title>fts`rustfft::Fft::process (21 samples, 0.04%)</title><rect x="57.5274%" y="85" width="0.0352%" height="15" fill="rgb(223,20,43)" fg:x="34326" fg:w="21"/><text x="57.7774%" y="95.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::ifft_lane (3,543 samples, 5.94%)</title><rect x="56.2034%" y="101" width="5.9378%" height="15" fill="rgb(229,81,49)" fg:x="33536" fg:w="3543"/><text x="56.4534%" y="111.50">fts`ndru..</text></g><g><title>fts`rustfft::array_utils::iter_chunks (2,732 samples, 4.58%)</title><rect x="57.5626%" y="85" width="4.5786%" height="15" fill="rgb(236,28,36)" fg:x="34347" fg:w="2732"/><text x="57.8126%" y="95.50">fts`r..</text></g><g><title>fts`rustfft::Fft::process (26 samples, 0.04%)</title><rect x="62.1411%" y="101" width="0.0436%" height="15" fill="rgb(249,185,26)" fg:x="37079" fg:w="26"/><text x="62.3911%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`DYLD-STUB$$_platform_memset (13 samples, 0.02%)</title><rect x="62.1847%" y="101" width="0.0218%" height="15" fill="rgb(249,174,33)" fg:x="37105" fg:w="13"/><text x="62.4347%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`_malloc_zone_malloc (143 samples, 0.24%)</title><rect x="62.2065%" y="101" width="0.2397%" height="15" fill="rgb(233,201,37)" fg:x="37118" fg:w="143"/><text x="62.4565%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (25 samples, 0.04%)</title><rect x="62.4462%" y="101" width="0.0419%" height="15" fill="rgb(221,78,26)" fg:x="37261" fg:w="25"/><text x="62.6962%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (77 samples, 0.13%)</title><rect x="62.4881%" y="101" width="0.1290%" height="15" fill="rgb(250,127,30)" fg:x="37286" fg:w="77"/><text x="62.7381%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`get_tiny_previous_free_msize (78 samples, 0.13%)</title><rect x="63.2305%" y="85" width="0.1307%" height="15" fill="rgb(230,49,44)" fg:x="37729" fg:w="78"/><text x="63.4805%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_list_add_ptr (209 samples, 0.35%)</title><rect x="63.7165%" y="69" width="0.3503%" height="15" fill="rgb(229,67,23)" fg:x="38019" fg:w="209"/><text x="63.9665%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (868 samples, 1.45%)</title><rect x="62.6171%" y="101" width="1.4547%" height="15" fill="rgb(249,83,47)" fg:x="37363" fg:w="868"/><text x="62.8671%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (424 samples, 0.71%)</title><rect x="63.3612%" y="85" width="0.7106%" height="15" fill="rgb(215,43,3)" fg:x="37807" fg:w="424"/><text x="63.6112%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`nanov2_malloc (28 samples, 0.05%)</title><rect x="64.0718%" y="101" width="0.0469%" height="15" fill="rgb(238,154,13)" fg:x="38231" fg:w="28"/><text x="64.3218%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (11 samples, 0.02%)</title><rect x="64.1187%" y="101" width="0.0184%" height="15" fill="rgb(219,56,2)" fg:x="38259" fg:w="11"/><text x="64.3687%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (55 samples, 0.09%)</title><rect x="64.1372%" y="101" width="0.0922%" height="15" fill="rgb(233,0,4)" fg:x="38270" fg:w="55"/><text x="64.3872%" y="111.50"></text></g><g><title>libsystem_platform.dylib`_platform_memmove (701 samples, 1.17%)</title><rect x="64.2293%" y="101" width="1.1748%" height="15" fill="rgb(235,30,7)" fg:x="38325" fg:w="701"/><text x="64.4793%" y="111.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each::_{{closure}} (8,369 samples, 14.03%)</title><rect x="51.5980%" y="117" width="14.0257%" height="15" fill="rgb(250,79,13)" fg:x="30788" fg:w="8369"/><text x="51.8480%" y="127.50">fts`ndarray::zip::Zip..</text></g><g><title>libsystem_platform.dylib`_platform_memset (131 samples, 0.22%)</title><rect x="65.4041%" y="101" width="0.2195%" height="15" fill="rgb(211,146,34)" fg:x="39026" fg:w="131"/><text x="65.6541%" y="111.50"></text></g><g><title>fts`rustfft::Fft::process (43 samples, 0.07%)</title><rect x="67.0197%" y="101" width="0.0721%" height="15" fill="rgb(228,22,38)" fg:x="39990" fg:w="43"/><text x="67.2697%" y="111.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::ifft_lane (3,636 samples, 6.09%)</title><rect x="65.6237%" y="117" width="6.0936%" height="15" fill="rgb(235,168,5)" fg:x="39157" fg:w="3636"/><text x="65.8737%" y="127.50">fts`ndru..</text></g><g><title>fts`rustfft::array_utils::iter_chunks (2,760 samples, 4.63%)</title><rect x="67.0918%" y="101" width="4.6255%" height="15" fill="rgb(221,155,16)" fg:x="40033" fg:w="2760"/><text x="67.3418%" y="111.50">fts`r..</text></g><g><title>fts`rustfft::Fft::process (34 samples, 0.06%)</title><rect x="71.7173%" y="117" width="0.0570%" height="15" fill="rgb(215,215,53)" fg:x="42793" fg:w="34"/><text x="71.9673%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`DYLD-STUB$$_platform_memset (23 samples, 0.04%)</title><rect x="71.7743%" y="117" width="0.0385%" height="15" fill="rgb(223,4,10)" fg:x="42827" fg:w="23"/><text x="72.0243%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_free (143 samples, 0.24%)</title><rect x="71.8128%" y="117" width="0.2397%" height="15" fill="rgb(234,103,6)" fg:x="42850" fg:w="143"/><text x="72.0628%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_malloc_zone_malloc (146 samples, 0.24%)</title><rect x="72.0525%" y="117" width="0.2447%" height="15" fill="rgb(227,97,0)" fg:x="42993" fg:w="146"/><text x="72.3025%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (79 samples, 0.13%)</title><rect x="72.2972%" y="117" width="0.1324%" height="15" fill="rgb(234,150,53)" fg:x="43139" fg:w="79"/><text x="72.5472%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (89 samples, 0.15%)</title><rect x="72.4296%" y="117" width="0.1492%" height="15" fill="rgb(228,201,54)" fg:x="43218" fg:w="89"/><text x="72.6796%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`get_tiny_previous_free_msize (56 samples, 0.09%)</title><rect x="73.2005%" y="101" width="0.0939%" height="15" fill="rgb(222,22,37)" fg:x="43678" fg:w="56"/><text x="73.4505%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_list_add_ptr (215 samples, 0.36%)</title><rect x="73.7066%" y="85" width="0.3603%" height="15" fill="rgb(237,53,32)" fg:x="43980" fg:w="215"/><text x="73.9566%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (891 samples, 1.49%)</title><rect x="72.5787%" y="117" width="1.4932%" height="15" fill="rgb(233,25,53)" fg:x="43307" fg:w="891"/><text x="72.8287%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (464 samples, 0.78%)</title><rect x="73.2943%" y="101" width="0.7776%" height="15" fill="rgb(210,40,34)" fg:x="43734" fg:w="464"/><text x="73.5443%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`nanov2_malloc (25 samples, 0.04%)</title><rect x="74.0720%" y="117" width="0.0419%" height="15" fill="rgb(241,220,44)" fg:x="44198" fg:w="25"/><text x="74.3220%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (20 samples, 0.03%)</title><rect x="74.1139%" y="117" width="0.0335%" height="15" fill="rgb(235,28,35)" fg:x="44223" fg:w="20"/><text x="74.3639%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (67 samples, 0.11%)</title><rect x="74.1474%" y="117" width="0.1123%" height="15" fill="rgb(210,56,17)" fg:x="44243" fg:w="67"/><text x="74.3974%" y="127.50"></text></g><g><title>libsystem_platform.dylib`_platform_memmove (486 samples, 0.81%)</title><rect x="74.2597%" y="117" width="0.8145%" height="15" fill="rgb(224,130,29)" fg:x="44310" fg:w="486"/><text x="74.5097%" y="127.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (16,663 samples, 27.93%)</title><rect x="47.3847%" y="133" width="27.9257%" height="15" fill="rgb(235,212,8)" fg:x="28274" fg:w="16663"/><text x="47.6347%" y="143.50">fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each</text></g><g><title>libsystem_platform.dylib`_platform_memset (141 samples, 0.24%)</title><rect x="75.0742%" y="117" width="0.2363%" height="15" fill="rgb(223,33,50)" fg:x="44796" fg:w="141"/><text x="75.3242%" y="127.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::ifft_lane (23 samples, 0.04%)</title><rect x="75.3105%" y="133" width="0.0385%" height="15" fill="rgb(219,149,13)" fg:x="44937" fg:w="23"/><text x="75.5605%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_free (151 samples, 0.25%)</title><rect x="75.3490%" y="133" width="0.2531%" height="15" fill="rgb(250,156,29)" fg:x="44960" fg:w="151"/><text x="75.5990%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (55 samples, 0.09%)</title><rect x="75.6021%" y="133" width="0.0922%" height="15" fill="rgb(216,193,19)" fg:x="45111" fg:w="55"/><text x="75.8521%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (49 samples, 0.08%)</title><rect x="75.6942%" y="133" width="0.0821%" height="15" fill="rgb(216,135,14)" fg:x="45166" fg:w="49"/><text x="75.9442%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (22 samples, 0.04%)</title><rect x="75.7764%" y="133" width="0.0369%" height="15" fill="rgb(241,47,5)" fg:x="45215" fg:w="22"/><text x="76.0264%" y="143.50"></text></g><g><title>fts`ndrustfft::ndifft (17,411 samples, 29.18%)</title><rect x="46.6473%" y="149" width="29.1793%" height="15" fill="rgb(233,42,35)" fg:x="27834" fg:w="17411"/><text x="46.8973%" y="159.50">fts`ndrustfft::ndifft</text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (8 samples, 0.01%)</title><rect x="75.8132%" y="133" width="0.0134%" height="15" fill="rgb(231,13,6)" fg:x="45237" fg:w="8"/><text x="76.0632%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (7 samples, 0.01%)</title><rect x="75.8149%" y="117" width="0.0117%" height="15" fill="rgb(207,181,40)" fg:x="45238" fg:w="7"/><text x="76.0649%" y="127.50"></text></g><g><title>fts`fts::domain::fft::FFT::inverse (20,226 samples, 33.90%)</title><rect x="41.9313%" y="165" width="33.8970%" height="15" fill="rgb(254,173,49)" fg:x="25020" fg:w="20226"/><text x="42.1813%" y="175.50">fts`fts::domain::fft::FFT::inverse</text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (1,612 samples, 2.70%)</title><rect x="75.8300%" y="165" width="2.7016%" height="15" fill="rgb(221,1,38)" fg:x="45247" fg:w="1612"/><text x="76.0800%" y="175.50">ft..</text></g><g><title>fts`ndarray::dimension::dimension_trait::Dimension::is_contiguous (6 samples, 0.01%)</title><rect x="78.5215%" y="149" width="0.0101%" height="15" fill="rgb(206,124,46)" fg:x="46853" fg:w="6"/><text x="78.7715%" y="159.50"></text></g><g><title>fts`ndarray::dimension::dimension_trait::Dimension::default_strides (6 samples, 0.01%)</title><rect x="78.5215%" y="133" width="0.0101%" height="15" fill="rgb(249,21,11)" fg:x="46853" fg:w="6"/><text x="78.7715%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P,),D&gt;::from (7 samples, 0.01%)</title><rect x="78.5316%" y="165" width="0.0117%" height="15" fill="rgb(222,201,40)" fg:x="46859" fg:w="7"/><text x="78.7816%" y="175.50"></text></g><g><title>fts`&lt;&amp;mut ndarray::ArrayBase&lt;S,D&gt; as ndarray::zip::ndproducer::IntoNdProducer&gt;::into_producer (6 samples, 0.01%)</title><rect x="78.5332%" y="149" width="0.0101%" height="15" fill="rgb(235,61,29)" fg:x="46860" fg:w="6"/><text x="78.7832%" y="159.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2,P3),D&gt;::for_each (1,541 samples, 2.58%)</title><rect x="78.5517%" y="165" width="2.5826%" height="15" fill="rgb(219,207,3)" fg:x="46871" fg:w="1541"/><text x="78.8017%" y="175.50">ft..</text></g><g><title>fts`DYLD-STUB$$free (109 samples, 0.18%)</title><rect x="81.1410%" y="149" width="0.1827%" height="15" fill="rgb(222,56,46)" fg:x="48416" fg:w="109"/><text x="81.3910%" y="159.50"></text></g><g><title>fts`&lt;realfft::ComplexToRealEven&lt;T&gt; as realfft::ComplexToReal&lt;T&gt;&gt;::process (37 samples, 0.06%)</title><rect x="81.5683%" y="133" width="0.0620%" height="15" fill="rgb(239,76,54)" fg:x="48671" fg:w="37"/><text x="81.8183%" y="143.50"></text></g><g><title>fts`DYLD-STUB$$bzero (49 samples, 0.08%)</title><rect x="81.6303%" y="133" width="0.0821%" height="15" fill="rgb(231,124,27)" fg:x="48708" fg:w="49"/><text x="81.8803%" y="143.50"></text></g><g><title>fts`DYLD-STUB$$malloc (46 samples, 0.08%)</title><rect x="81.7124%" y="133" width="0.0771%" height="15" fill="rgb(249,195,6)" fg:x="48757" fg:w="46"/><text x="81.9624%" y="143.50"></text></g><g><title>fts`DYLD-STUB$$memcpy (39 samples, 0.07%)</title><rect x="81.7895%" y="133" width="0.0654%" height="15" fill="rgb(237,174,47)" fg:x="48803" fg:w="39"/><text x="82.0395%" y="143.50"></text></g><g><title>fts`__rdl_alloc (37 samples, 0.06%)</title><rect x="81.8549%" y="133" width="0.0620%" height="15" fill="rgb(206,201,31)" fg:x="48842" fg:w="37"/><text x="82.1049%" y="143.50"></text></g><g><title>fts`__rdl_dealloc (41 samples, 0.07%)</title><rect x="81.9169%" y="133" width="0.0687%" height="15" fill="rgb(231,57,52)" fg:x="48879" fg:w="41"/><text x="82.1669%" y="143.50"></text></g><g><title>fts`&lt;rustfft::neon::neon_butterflies::NeonF64Butterfly16&lt;T&gt; as rustfft::Fft&lt;T&gt;&gt;::process_outofplace_with_scratch (40 samples, 0.07%)</title><rect x="86.2039%" y="85" width="0.0670%" height="15" fill="rgb(248,177,22)" fg:x="51437" fg:w="40"/><text x="86.4539%" y="95.50"></text></g><g><title>fts`&lt;realfft::ComplexToRealEven&lt;T&gt; as realfft::ComplexToReal&lt;T&gt;&gt;::process_with_scratch (3,232 samples, 5.42%)</title><rect x="83.8006%" y="101" width="5.4165%" height="15" fill="rgb(215,211,37)" fg:x="50003" fg:w="3232"/><text x="84.0506%" y="111.50">fts`&lt;re..</text></g><g><title>fts`rustfft::array_utils::iter_chunks_zipped (1,758 samples, 2.95%)</title><rect x="86.2709%" y="85" width="2.9463%" height="15" fill="rgb(241,128,51)" fg:x="51477" fg:w="1758"/><text x="86.5209%" y="95.50">ft..</text></g><g><title>fts`&lt;realfft::ComplexToRealEven&lt;T&gt; as realfft::ComplexToReal&lt;T&gt;&gt;::process (3,384 samples, 5.67%)</title><rect x="83.6632%" y="117" width="5.6713%" height="15" fill="rgb(227,165,31)" fg:x="49921" fg:w="3384"/><text x="83.9132%" y="127.50">fts`&lt;re..</text></g><g><title>fts`&lt;rustfft::neon::neon_butterflies::NeonF64Butterfly16&lt;T&gt; as rustfft::Fft&lt;T&gt;&gt;::process_outofplace_with_scratch (70 samples, 0.12%)</title><rect x="89.2172%" y="101" width="0.1173%" height="15" fill="rgb(228,167,24)" fg:x="53235" fg:w="70"/><text x="89.4672%" y="111.50"></text></g><g><title>fts`&lt;realfft::ComplexToRealEven&lt;T&gt; as realfft::ComplexToReal&lt;T&gt;&gt;::process_with_scratch (40 samples, 0.07%)</title><rect x="89.3345%" y="117" width="0.0670%" height="15" fill="rgb(228,143,12)" fg:x="53305" fg:w="40"/><text x="89.5845%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`rack_get_thread_index (273 samples, 0.46%)</title><rect x="89.6646%" y="101" width="0.4575%" height="15" fill="rgb(249,149,8)" fg:x="53502" fg:w="273"/><text x="89.9146%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (72 samples, 0.12%)</title><rect x="90.1222%" y="101" width="0.1207%" height="15" fill="rgb(243,35,44)" fg:x="53775" fg:w="72"/><text x="90.3722%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (9 samples, 0.02%)</title><rect x="90.7892%" y="85" width="0.0151%" height="15" fill="rgb(246,89,9)" fg:x="54173" fg:w="9"/><text x="91.0392%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`set_tiny_meta_header_in_use (217 samples, 0.36%)</title><rect x="90.8059%" y="85" width="0.3637%" height="15" fill="rgb(233,213,13)" fg:x="54183" fg:w="217"/><text x="91.0559%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`_tiny_check_and_zero_inline_meta_from_freelist (133 samples, 0.22%)</title><rect x="91.8668%" y="69" width="0.2229%" height="15" fill="rgb(233,141,41)" fg:x="54816" fg:w="133"/><text x="92.1168%" y="79.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (1,926 samples, 3.23%)</title><rect x="89.4015%" y="117" width="3.2278%" height="15" fill="rgb(239,167,4)" fg:x="53345" fg:w="1926"/><text x="89.6515%" y="127.50">lib..</text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (1,424 samples, 2.39%)</title><rect x="90.2428%" y="101" width="2.3865%" height="15" fill="rgb(209,217,16)" fg:x="53847" fg:w="1424"/><text x="90.4928%" y="111.50">li..</text></g><g><title>libsystem_malloc.dylib`tiny_malloc_from_free_list (871 samples, 1.46%)</title><rect x="91.1696%" y="85" width="1.4597%" height="15" fill="rgb(219,88,35)" fg:x="54400" fg:w="871"/><text x="91.4196%" y="95.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_list_add_ptr (322 samples, 0.54%)</title><rect x="92.0897%" y="69" width="0.5396%" height="15" fill="rgb(220,193,23)" fg:x="54949" fg:w="322"/><text x="92.3397%" y="79.50"></text></g><g><title>fts`ndrustfft::R2cFftHandler&lt;T&gt;::ifft_r2c_lane (6,417 samples, 10.75%)</title><rect x="81.9856%" y="133" width="10.7543%" height="15" fill="rgb(230,90,52)" fg:x="48920" fg:w="6417"/><text x="82.2356%" y="143.50">fts`ndrustfft::R..</text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (66 samples, 0.11%)</title><rect x="92.6293%" y="117" width="0.1106%" height="15" fill="rgb(252,106,19)" fg:x="55271" fg:w="66"/><text x="92.8793%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`DYLD-STUB$$_platform_memset (46 samples, 0.08%)</title><rect x="92.7399%" y="133" width="0.0771%" height="15" fill="rgb(206,74,20)" fg:x="55337" fg:w="46"/><text x="92.9899%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_malloc_zone_malloc (292 samples, 0.49%)</title><rect x="92.8170%" y="133" width="0.4894%" height="15" fill="rgb(230,138,44)" fg:x="55383" fg:w="292"/><text x="93.0670%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (49 samples, 0.08%)</title><rect x="93.3064%" y="133" width="0.0821%" height="15" fill="rgb(235,182,43)" fg:x="55675" fg:w="49"/><text x="93.5564%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (128 samples, 0.21%)</title><rect x="93.3885%" y="133" width="0.2145%" height="15" fill="rgb(242,16,51)" fg:x="55724" fg:w="128"/><text x="93.6385%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`get_tiny_previous_free_msize (15 samples, 0.03%)</title><rect x="94.6723%" y="117" width="0.0251%" height="15" fill="rgb(248,9,4)" fg:x="56490" fg:w="15"/><text x="94.9223%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_list_add_ptr (345 samples, 0.58%)</title><rect x="95.8203%" y="101" width="0.5782%" height="15" fill="rgb(210,31,22)" fg:x="57175" fg:w="345"/><text x="96.0703%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (1,933 samples, 3.24%)</title><rect x="93.6030%" y="133" width="3.2395%" height="15" fill="rgb(239,54,39)" fg:x="55852" fg:w="1933"/><text x="93.8530%" y="143.50">lib..</text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (1,280 samples, 2.15%)</title><rect x="94.6974%" y="117" width="2.1452%" height="15" fill="rgb(230,99,41)" fg:x="56505" fg:w="1280"/><text x="94.9474%" y="127.50">l..</text></g><g><title>libsystem_malloc.dylib`tiny_free_list_remove_ptr (265 samples, 0.44%)</title><rect x="96.3985%" y="101" width="0.4441%" height="15" fill="rgb(253,106,12)" fg:x="57520" fg:w="265"/><text x="96.6485%" y="111.50"></text></g><g><title>libsystem_malloc.dylib`nanov2_malloc (64 samples, 0.11%)</title><rect x="96.8426%" y="133" width="0.1073%" height="15" fill="rgb(213,46,41)" fg:x="57785" fg:w="64"/><text x="97.0926%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (25 samples, 0.04%)</title><rect x="96.9498%" y="133" width="0.0419%" height="15" fill="rgb(215,133,35)" fg:x="57849" fg:w="25"/><text x="97.1998%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`tiny_free_no_lock (84 samples, 0.14%)</title><rect x="96.9917%" y="133" width="0.1408%" height="15" fill="rgb(213,28,5)" fg:x="57874" fg:w="84"/><text x="97.2417%" y="143.50"></text></g><g><title>libsystem_platform.dylib`__bzero (39 samples, 0.07%)</title><rect x="97.1325%" y="133" width="0.0654%" height="15" fill="rgb(215,77,49)" fg:x="57958" fg:w="39"/><text x="97.3825%" y="143.50"></text></g><g><title>libsystem_platform.dylib`_platform_memmove (391 samples, 0.66%)</title><rect x="97.1979%" y="133" width="0.6553%" height="15" fill="rgb(248,100,22)" fg:x="57997" fg:w="391"/><text x="97.4479%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (10,088 samples, 16.91%)</title><rect x="81.3387%" y="149" width="16.9066%" height="15" fill="rgb(208,67,9)" fg:x="48534" fg:w="10088"/><text x="81.5887%" y="159.50">fts`ndarray::zip::Zip&lt;(P1,..</text></g><g><title>libsystem_platform.dylib`_platform_memset (234 samples, 0.39%)</title><rect x="97.8532%" y="133" width="0.3922%" height="15" fill="rgb(219,133,21)" fg:x="58388" fg:w="234"/><text x="98.1032%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`_free (274 samples, 0.46%)</title><rect x="98.2470%" y="149" width="0.4592%" height="15" fill="rgb(246,46,29)" fg:x="58623" fg:w="274"/><text x="98.4970%" y="159.50"></text></g><g><title>libsystem_malloc.dylib`_nanov2_free (118 samples, 0.20%)</title><rect x="98.7062%" y="149" width="0.1978%" height="15" fill="rgb(246,185,52)" fg:x="58897" fg:w="118"/><text x="98.9562%" y="159.50"></text></g><g><title>libsystem_malloc.dylib`_szone_free (65 samples, 0.11%)</title><rect x="98.9040%" y="149" width="0.1089%" height="15" fill="rgb(252,136,11)" fg:x="59015" fg:w="65"/><text x="99.1540%" y="159.50"></text></g><g><title>fts`ndrustfft::ndifft_r2c (10,698 samples, 17.93%)</title><rect x="81.1376%" y="165" width="17.9289%" height="15" fill="rgb(219,138,53)" fg:x="48414" fg:w="10698"/><text x="81.3876%" y="175.50">fts`ndrustfft::ndifft_r2c</text></g><g><title>libsystem_malloc.dylib`free_tiny (32 samples, 0.05%)</title><rect x="99.0129%" y="149" width="0.0536%" height="15" fill="rgb(211,51,23)" fg:x="59080" fg:w="32"/><text x="99.2629%" y="159.50"></text></g><g><title>fts`fts::solvers::propagator::PropagatorStep::apply (58,859 samples, 98.64%)</title><rect x="0.4274%" y="181" width="98.6425%" height="15" fill="rgb(247,221,28)" fg:x="255" fg:w="58859"/><text x="0.6774%" y="191.50">fts`fts::solvers::propagator::PropagatorStep::apply</text></g><g><title>fts`DYLD-STUB$$exp (15 samples, 0.03%)</title><rect x="99.0699%" y="165" width="0.0251%" height="15" fill="rgb(251,222,45)" fg:x="59114" fg:w="15"/><text x="99.3199%" y="175.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (96 samples, 0.16%)</title><rect x="99.0950%" y="165" width="0.1609%" height="15" fill="rgb(217,162,53)" fg:x="59129" fg:w="96"/><text x="99.3450%" y="175.50"></text></g><g><title>libsystem_m.dylib`exp (84 samples, 0.14%)</title><rect x="99.1151%" y="149" width="0.1408%" height="15" fill="rgb(229,93,14)" fg:x="59141" fg:w="84"/><text x="99.3651%" y="159.50"></text></g><g><title>fts`fts::solvers::propagator::PropagatorStep::update_operators (112 samples, 0.19%)</title><rect x="99.0699%" y="181" width="0.1877%" height="15" fill="rgb(209,67,49)" fg:x="59114" fg:w="112"/><text x="99.3199%" y="191.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::map_inplace (13 samples, 0.02%)</title><rect x="99.2576%" y="181" width="0.0218%" height="15" fill="rgb(213,87,29)" fg:x="59226" fg:w="13"/><text x="99.5076%" y="191.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (10 samples, 0.02%)</title><rect x="99.2810%" y="181" width="0.0168%" height="15" fill="rgb(205,151,52)" fg:x="59240" fg:w="10"/><text x="99.5310%" y="191.50"></text></g><g><title>fts`&lt;fts::solvers::polymer::PolymerSolver as fts::solvers::solver::SolverOps&gt;::solve (59,249 samples, 99.30%)</title><rect x="0.0067%" y="197" width="99.2961%" height="15" fill="rgb(253,215,39)" fg:x="4" fg:w="59249"/><text x="0.2567%" y="207.50">fts`&lt;fts::solvers::polymer::PolymerSolver as fts::solvers::solver::SolverOps&gt;::solve</text></g><g><title>fts`&lt;ndarray::ArrayBase&lt;S,ndarray::dimension::dim::Dim&lt;[usize (17 samples, 0.03%)</title><rect x="99.3112%" y="181" width="0.0285%" height="15" fill="rgb(221,220,41)" fg:x="59258" fg:w="17"/><text x="99.5612%" y="191.50"></text></g><g><title> 2]&gt;&gt; as ndarray::linalg::impl_linalg::Dot&lt;ndarray::ArrayBase&lt;S2,ndarray::dimension::dim::Dim&lt;[usize (17 samples, 0.03%)</title><rect x="99.3112%" y="165" width="0.0285%" height="15" fill="rgb(218,133,21)" fg:x="59258" fg:w="17"/><text x="99.5612%" y="175.50"></text></g><g><title> 2]&gt;&gt;&gt;&gt;::dot (17 samples, 0.03%)</title><rect x="99.3112%" y="149" width="0.0285%" height="15" fill="rgb(221,193,43)" fg:x="59258" fg:w="17"/><text x="99.5612%" y="159.50"></text></g><g><title>fts`ndarray::linalg::impl_linalg::mat_mul_impl (17 samples, 0.03%)</title><rect x="99.3112%" y="133" width="0.0285%" height="15" fill="rgb(240,128,52)" fg:x="59258" fg:w="17"/><text x="99.5612%" y="143.50"></text></g><g><title>libopenblasp-r0.3.27.dylib`cblas_dgemm (17 samples, 0.03%)</title><rect x="99.3112%" y="117" width="0.0285%" height="15" fill="rgb(253,114,12)" fg:x="59258" fg:w="17"/><text x="99.5612%" y="127.50"></text></g><g><title>fts`fts::domain::domain::Domain::ksq (29 samples, 0.05%)</title><rect x="99.3028%" y="197" width="0.0486%" height="15" fill="rgb(215,223,47)" fg:x="59253" fg:w="29"/><text x="99.5528%" y="207.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::map_inplace (15 samples, 0.03%)</title><rect x="99.3598%" y="197" width="0.0251%" height="15" fill="rgb(248,225,23)" fg:x="59287" fg:w="15"/><text x="99.6098%" y="207.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (19 samples, 0.03%)</title><rect x="99.3849%" y="197" width="0.0318%" height="15" fill="rgb(250,108,0)" fg:x="59302" fg:w="19"/><text x="99.6349%" y="207.50"></text></g><g><title>fts`fts::system::system::System::update (59,325 samples, 99.42%)</title><rect x="0.0067%" y="213" width="99.4235%" height="15" fill="rgb(228,208,7)" fg:x="4" fg:w="59325"/><text x="0.2567%" y="223.50">fts`fts::system::system::System::update</text></g><g><title>fts`fts::simulation::updater::FieldUpdater::step (59,328 samples, 99.43%)</title><rect x="0.0067%" y="229" width="99.4285%" height="15" fill="rgb(244,45,10)" fg:x="4" fg:w="59328"/><text x="0.2567%" y="239.50">fts`fts::simulation::updater::FieldUpdater::step</text></g><g><title>fts`fts::system::interaction::Interaction::energy (8 samples, 0.01%)</title><rect x="99.4352%" y="213" width="0.0134%" height="15" fill="rgb(207,125,25)" fg:x="59332" fg:w="8"/><text x="99.6852%" y="223.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::fold (8 samples, 0.01%)</title><rect x="99.4352%" y="197" width="0.0134%" height="15" fill="rgb(210,195,18)" fg:x="59332" fg:w="8"/><text x="99.6852%" y="207.50"></text></g><g><title>fts`fts::system::system::System::free_energy (14 samples, 0.02%)</title><rect x="99.4352%" y="229" width="0.0235%" height="15" fill="rgb(249,80,12)" fg:x="59332" fg:w="14"/><text x="99.6852%" y="239.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::fold (6 samples, 0.01%)</title><rect x="99.4486%" y="213" width="0.0101%" height="15" fill="rgb(221,65,9)" fg:x="59340" fg:w="6"/><text x="99.6986%" y="223.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::fold (12 samples, 0.02%)</title><rect x="99.4587%" y="229" width="0.0201%" height="15" fill="rgb(235,49,36)" fg:x="59346" fg:w="12"/><text x="99.7087%" y="239.50"></text></g><g><title>fts`fts::simulation::scft::SCFT::run (59,357 samples, 99.48%)</title><rect x="0.0067%" y="245" width="99.4771%" height="15" fill="rgb(225,32,20)" fg:x="4" fg:w="59357"/><text x="0.2567%" y="255.50">fts`fts::simulation::scft::SCFT::run</text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (6 samples, 0.01%)</title><rect x="99.4972%" y="181" width="0.0101%" height="15" fill="rgb(215,141,46)" fg:x="59369" fg:w="6"/><text x="99.7472%" y="191.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (12 samples, 0.02%)</title><rect x="99.5190%" y="133" width="0.0201%" height="15" fill="rgb(250,160,47)" fg:x="59382" fg:w="12"/><text x="99.7690%" y="143.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (10 samples, 0.02%)</title><rect x="99.5224%" y="117" width="0.0168%" height="15" fill="rgb(216,222,40)" fg:x="59384" fg:w="10"/><text x="99.7724%" y="127.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (16 samples, 0.03%)</title><rect x="99.5140%" y="149" width="0.0268%" height="15" fill="rgb(234,217,39)" fg:x="59379" fg:w="16"/><text x="99.7640%" y="159.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (8 samples, 0.01%)</title><rect x="99.5408%" y="133" width="0.0134%" height="15" fill="rgb(207,178,40)" fg:x="59395" fg:w="8"/><text x="99.7908%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (7 samples, 0.01%)</title><rect x="99.5425%" y="117" width="0.0117%" height="15" fill="rgb(221,136,13)" fg:x="59396" fg:w="7"/><text x="99.7925%" y="127.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (9 samples, 0.02%)</title><rect x="99.5542%" y="133" width="0.0151%" height="15" fill="rgb(249,199,10)" fg:x="59403" fg:w="9"/><text x="99.8042%" y="143.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks (16 samples, 0.03%)</title><rect x="99.5693%" y="133" width="0.0268%" height="15" fill="rgb(249,222,13)" fg:x="59412" fg:w="16"/><text x="99.8193%" y="143.50"></text></g><g><title>libsystem_platform.dylib`_platform_memmove (6 samples, 0.01%)</title><rect x="99.6062%" y="133" width="0.0101%" height="15" fill="rgb(244,185,38)" fg:x="59434" fg:w="6"/><text x="99.8562%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each::_{{closure}} (46 samples, 0.08%)</title><rect x="99.5408%" y="149" width="0.0771%" height="15" fill="rgb(236,202,9)" fg:x="59395" fg:w="46"/><text x="99.7908%" y="159.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks (13 samples, 0.02%)</title><rect x="99.6196%" y="149" width="0.0218%" height="15" fill="rgb(250,229,37)" fg:x="59442" fg:w="13"/><text x="99.8696%" y="159.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (88 samples, 0.15%)</title><rect x="99.5106%" y="165" width="0.1475%" height="15" fill="rgb(206,174,23)" fg:x="59377" fg:w="88"/><text x="99.7606%" y="175.50"></text></g><g><title>fts`ndrustfft::ndfft (91 samples, 0.15%)</title><rect x="99.5073%" y="181" width="0.1525%" height="15" fill="rgb(211,33,43)" fg:x="59375" fg:w="91"/><text x="99.7573%" y="191.50"></text></g><g><title>fts`&lt;realfft::RealToComplexEven&lt;T&gt; as realfft::RealToComplex&lt;T&gt;&gt;::process_with_scratch (11 samples, 0.02%)</title><rect x="99.6615%" y="117" width="0.0184%" height="15" fill="rgb(245,58,50)" fg:x="59467" fg:w="11"/><text x="99.9115%" y="127.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks_zipped (8 samples, 0.01%)</title><rect x="99.6665%" y="101" width="0.0134%" height="15" fill="rgb(244,68,36)" fg:x="59470" fg:w="8"/><text x="99.9165%" y="111.50"></text></g><g><title>fts`&lt;realfft::RealToComplexEven&lt;T&gt; as realfft::RealToComplex&lt;T&gt;&gt;::process (12 samples, 0.02%)</title><rect x="99.6615%" y="133" width="0.0201%" height="15" fill="rgb(232,229,15)" fg:x="59467" fg:w="12"/><text x="99.9115%" y="143.50"></text></g><g><title>fts`ndrustfft::R2cFftHandler&lt;T&gt;::fft_r2c_lane (15 samples, 0.03%)</title><rect x="99.6615%" y="149" width="0.0251%" height="15" fill="rgb(254,30,23)" fg:x="59467" fg:w="15"/><text x="99.9115%" y="159.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (20 samples, 0.03%)</title><rect x="99.6615%" y="165" width="0.0335%" height="15" fill="rgb(235,160,14)" fg:x="59467" fg:w="20"/><text x="99.9115%" y="175.50"></text></g><g><title>fts`fts::domain::fft::FFT::forward (121 samples, 0.20%)</title><rect x="99.4972%" y="197" width="0.2028%" height="15" fill="rgb(212,155,44)" fg:x="59369" fg:w="121"/><text x="99.7472%" y="207.50"></text></g><g><title>fts`ndrustfft::ndfft_r2c (24 samples, 0.04%)</title><rect x="99.6598%" y="181" width="0.0402%" height="15" fill="rgb(226,2,50)" fg:x="59466" fg:w="24"/><text x="99.9098%" y="191.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (19 samples, 0.03%)</title><rect x="99.7000%" y="181" width="0.0318%" height="15" fill="rgb(234,177,6)" fg:x="59490" fg:w="19"/><text x="99.9500%" y="191.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (8 samples, 0.01%)</title><rect x="99.7469%" y="149" width="0.0134%" height="15" fill="rgb(217,24,9)" fg:x="59518" fg:w="8"/><text x="99.9969%" y="159.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (6 samples, 0.01%)</title><rect x="99.7503%" y="133" width="0.0101%" height="15" fill="rgb(220,13,46)" fg:x="59520" fg:w="6"/><text x="100.0003%" y="143.50"></text></g><g><title>fts`ndarray::iterators::to_vec_mapped (9 samples, 0.02%)</title><rect x="99.7687%" y="133" width="0.0151%" height="15" fill="rgb(239,221,27)" fg:x="59531" fg:w="9"/><text x="100.0187%" y="143.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::ifft_lane (24 samples, 0.04%)</title><rect x="99.7838%" y="133" width="0.0402%" height="15" fill="rgb(222,198,25)" fg:x="59540" fg:w="24"/><text x="100.0338%" y="143.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks (15 samples, 0.03%)</title><rect x="99.7989%" y="117" width="0.0251%" height="15" fill="rgb(211,99,13)" fg:x="59549" fg:w="15"/><text x="100.0489%" y="127.50"></text></g><g><title>libsystem_malloc.dylib`free_tiny (6 samples, 0.01%)</title><rect x="99.8257%" y="133" width="0.0101%" height="15" fill="rgb(232,111,31)" fg:x="59565" fg:w="6"/><text x="100.0757%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each::_{{closure}} (51 samples, 0.09%)</title><rect x="99.7603%" y="149" width="0.0855%" height="15" fill="rgb(245,82,37)" fg:x="59526" fg:w="51"/><text x="100.0103%" y="159.50"></text></g><g><title>fts`ndrustfft::FftHandler&lt;T&gt;::ifft_lane (15 samples, 0.03%)</title><rect x="99.8458%" y="149" width="0.0251%" height="15" fill="rgb(227,149,46)" fg:x="59577" fg:w="15"/><text x="100.0958%" y="159.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks (12 samples, 0.02%)</title><rect x="99.8508%" y="133" width="0.0201%" height="15" fill="rgb(218,36,50)" fg:x="59580" fg:w="12"/><text x="100.1008%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (92 samples, 0.15%)</title><rect x="99.7335%" y="165" width="0.1542%" height="15" fill="rgb(226,80,48)" fg:x="59510" fg:w="92"/><text x="99.9835%" y="175.50"></text></g><g><title>fts`fts::domain::fft::FFT::inverse (115 samples, 0.19%)</title><rect x="99.7000%" y="197" width="0.1927%" height="15" fill="rgb(238,224,15)" fg:x="59490" fg:w="115"/><text x="99.9500%" y="207.50"></text></g><g><title>fts`ndrustfft::ndifft (96 samples, 0.16%)</title><rect x="99.7319%" y="181" width="0.1609%" height="15" fill="rgb(241,136,10)" fg:x="59509" fg:w="96"/><text x="99.9819%" y="191.50"></text></g><g><title>fts`ndarray::impl_methods::_&lt;impl ndarray::ArrayBase&lt;S,D&gt;&gt;::zip_mut_with_same_shape (7 samples, 0.01%)</title><rect x="99.8927%" y="197" width="0.0117%" height="15" fill="rgb(208,32,45)" fg:x="59605" fg:w="7"/><text x="100.1427%" y="207.50"></text></g><g><title>fts`&lt;realfft::ComplexToRealEven&lt;T&gt; as realfft::ComplexToReal&lt;T&gt;&gt;::process (23 samples, 0.04%)</title><rect x="99.9196%" y="149" width="0.0385%" height="15" fill="rgb(207,135,9)" fg:x="59621" fg:w="23"/><text x="100.1696%" y="159.50"></text></g><g><title>fts`&lt;realfft::ComplexToRealEven&lt;T&gt; as realfft::ComplexToReal&lt;T&gt;&gt;::process_with_scratch (23 samples, 0.04%)</title><rect x="99.9196%" y="133" width="0.0385%" height="15" fill="rgb(206,86,44)" fg:x="59621" fg:w="23"/><text x="100.1696%" y="143.50"></text></g><g><title>fts`rustfft::array_utils::iter_chunks_zipped (12 samples, 0.02%)</title><rect x="99.9380%" y="117" width="0.0201%" height="15" fill="rgb(245,177,15)" fg:x="59632" fg:w="12"/><text x="100.1880%" y="127.50"></text></g><g><title>fts`ndrustfft::R2cFftHandler&lt;T&gt;::ifft_r2c_lane (36 samples, 0.06%)</title><rect x="99.9129%" y="165" width="0.0603%" height="15" fill="rgb(206,64,50)" fg:x="59617" fg:w="36"/><text x="100.1629%" y="175.50"></text></g><g><title>libsystem_malloc.dylib`szone_malloc_should_clear (9 samples, 0.02%)</title><rect x="99.9581%" y="149" width="0.0151%" height="15" fill="rgb(234,36,40)" fg:x="59644" fg:w="9"/><text x="100.2081%" y="159.50"></text></g><g><title>libsystem_malloc.dylib`tiny_malloc_should_clear (7 samples, 0.01%)</title><rect x="99.9615%" y="133" width="0.0117%" height="15" fill="rgb(213,64,8)" fg:x="59646" fg:w="7"/><text x="100.2115%" y="143.50"></text></g><g><title>fts`ndarray::zip::Zip&lt;(P1,P2),D&gt;::for_each (46 samples, 0.08%)</title><rect x="99.9129%" y="181" width="0.0771%" height="15" fill="rgb(210,75,36)" fg:x="59617" fg:w="46"/><text x="100.1629%" y="191.50"></text></g><g><title>fts`fts::solvers::propagator::PropagatorStep::apply (297 samples, 0.50%)</title><rect x="99.4972%" y="213" width="0.4977%" height="15" fill="rgb(229,88,21)" fg:x="59369" fg:w="297"/><text x="99.7472%" y="223.50"></text></g><g><title>fts`ndrustfft::ndifft_r2c (50 samples, 0.08%)</title><rect x="99.9112%" y="197" width="0.0838%" height="15" fill="rgb(252,204,47)" fg:x="59616" fg:w="50"/><text x="100.1612%" y="207.50"></text></g><g><title>fts`fts::system::system::System::update (301 samples, 0.50%)</title><rect x="99.4922%" y="245" width="0.5044%" height="15" fill="rgb(208,77,27)" fg:x="59366" fg:w="301"/><text x="99.7422%" y="255.50"></text></g><g><title>fts`&lt;fts::solvers::polymer::PolymerSolver as fts::solvers::solver::SolverOps&gt;::solve (301 samples, 0.50%)</title><rect x="99.4922%" y="229" width="0.5044%" height="15" fill="rgb(221,76,26)" fg:x="59366" fg:w="301"/><text x="99.7422%" y="239.50"></text></g><g><title>dyld`start (59,668 samples, 100.00%)</title><rect x="0.0000%" y="341" width="99.9983%" height="15" fill="rgb(225,139,18)" fg:x="0" fg:w="59668"/><text x="0.2500%" y="351.50">dyld`start</text></g><g><title>fts`main (59,668 samples, 100.00%)</title><rect x="0.0000%" y="325" width="99.9983%" height="15" fill="rgb(230,137,11)" fg:x="0" fg:w="59668"/><text x="0.2500%" y="335.50">fts`main</text></g><g><title>fts`std::rt::lang_start_internal (59,668 samples, 100.00%)</title><rect x="0.0000%" y="309" width="99.9983%" height="15" fill="rgb(212,28,1)" fg:x="0" fg:w="59668"/><text x="0.2500%" y="319.50">fts`std::rt::lang_start_internal</text></g><g><title>fts`std::rt::lang_start::_{{closure}} (59,668 samples, 100.00%)</title><rect x="0.0000%" y="293" width="99.9983%" height="15" fill="rgb(248,164,17)" fg:x="0" fg:w="59668"/><text x="0.2500%" y="303.50">fts`std::rt::lang_start::_{{closure}}</text></g><g><title>fts`std::sys_common::backtrace::__rust_begin_short_backtrace (59,668 samples, 100.00%)</title><rect x="0.0000%" y="277" width="99.9983%" height="15" fill="rgb(222,171,42)" fg:x="0" fg:w="59668"/><text x="0.2500%" y="287.50">fts`std::sys_common::backtrace::__rust_begin_short_backtrace</text></g><g><title>fts`fts::main (59,668 samples, 100.00%)</title><rect x="0.0000%" y="261" width="99.9983%" height="15" fill="rgb(243,84,45)" fg:x="0" fg:w="59668"/><text x="0.2500%" y="271.50">fts`fts::main</text></g><g><title>all (59,669 samples, 100%)</title><rect x="0.0000%" y="357" width="100.0000%" height="15" fill="rgb(252,49,23)" fg:x="0" fg:w="59669"/><text x="0.2500%" y="367.50"></text></g></svg></svg>

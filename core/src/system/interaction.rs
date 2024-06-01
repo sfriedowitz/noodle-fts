@@ -1,7 +1,7 @@
 use itertools::iproduct;
 use ndarray::Array2;
 
-use crate::fields::{FieldExt, RField};
+use crate::fields::{FieldOps, RField};
 
 #[derive(Debug)]
 pub struct Interaction {

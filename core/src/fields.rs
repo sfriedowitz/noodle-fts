@@ -10,7 +10,7 @@ pub type RField = Field<f64>;
 /// Complex-valued multi-dimensional field grid.
 pub type CField = Field<Complex64>;
 
-pub trait FieldExt<A> {
+pub trait FieldOps<A> {
     /// Accumulate `f(acc, self, other)` from the initial value `init`.
     fn fold_with<B, C, F>(&self, other: &Field<B>, init: C, f: F) -> C
     where
@@ -23,7 +23,7 @@ pub trait FieldExt<A> {
         F: FnMut(&mut A, &B, &C);
 }
 
-impl<A> FieldExt<A> for Field<A> {
+impl<A> FieldOps<A> for Field<A> {
     fn fold_with<B, C, F>(&self, other: &Field<B>, init: C, f: F) -> C
     where
         F: Fn(C, &A, &B) -> C,

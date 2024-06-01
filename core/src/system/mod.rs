@@ -1,5 +1,5 @@
 mod interaction;
 mod system;
 
-pub use interaction::Interaction;
-pub use system::System;
+pub use interaction::*;
+pub use system::*;

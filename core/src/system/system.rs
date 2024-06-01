@@ -4,14 +4,15 @@ use rand::{distributions::Distribution, Rng};
 use super::Interaction;
 use crate::{
     chem::{Monomer, Species, SpeciesDescription},
-    domain::Domain,
-    fields::{FieldExt, RField},
+    domain::{Domain, Mesh, UnitCell},
+    fields::{FieldOps, RField},
     solvers::{SolverOps, SpeciesSolver},
     Result,
 };
 
 #[derive(Debug)]
 pub struct System {
+    // Components
     domain: Domain,
     interaction: Interaction,
     monomers: Vec<Monomer>,
@@ -26,9 +27,7 @@ pub struct System {
 }
 
 impl System {
-    pub fn new(domain: Domain, interaction: Interaction, species: Vec<Species>) -> Result<Self> {
-        Self::validate_species(&species)?;
-
+    pub fn new(mesh: Mesh, cell: UnitCell, species: Vec<Species>) -> Result<Self> {
         let monomers: Vec<Monomer> = species
             .iter()
             .flat_map(|s| s.monomers())
@@ -36,11 +35,18 @@ impl System {
             .sorted_by(|a, b| a.id.cmp(&b.id))
             .collect();
 
-        Self::validate_monomers(&interaction, &monomers)?;
+        let monomer_ids: Vec<usize> = monomers.iter().map(|m| m.id).collect();
+        for (idx, monomer_id) in monomer_ids.iter().enumerate() {
+            if idx != *monomer_id {
+                return Err(format!("monomer IDs out of order {:?}", monomer_ids).into());
+            }
+        }
 
+        let domain = Domain::new(mesh, cell)?;
+        let interaction = Interaction::new(monomers.len());
         let solvers = species
             .into_iter()
-            .map(|species| SpeciesSolver::new(domain.mesh(), species))
+            .map(|species| SpeciesSolver::new(mesh, species))
             .collect();
 
         let mesh = domain.mesh();
@@ -65,28 +71,6 @@ impl System {
         })
     }
 
-    fn validate_species(species: &[Species]) -> Result<()> {
-        if species.is_empty() {
-            return Err("system must contain at least one species".into());
-        }
-        Ok(())
-    }
-
-    fn validate_monomers(interaction: &Interaction, monomers: &[Monomer]) -> Result<()> {
-        if interaction.nmonomer() != monomers.len() {
-            return Err("interaction contains incorrect number of monomers".into());
-        }
-
-        let monomer_ids: Vec<usize> = monomers.iter().map(|m| m.id).collect();
-        for (idx, monomer_id) in monomer_ids.iter().copied().enumerate() {
-            if monomer_id != idx {
-                return Err(format!("monomer IDs must be consecutive: {:?}", monomer_ids).into());
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn nmonomer(&self) -> usize {
         self.monomers.len()
     }
@@ -109,6 +93,10 @@ impl System {
 
     pub fn interaction(&self) -> &Interaction {
         &self.interaction
+    }
+
+    pub fn interaction_mut(&mut self) -> &mut Interaction {
+        &mut self.interaction
     }
 
     pub fn fields(&self) -> &[RField] {
@@ -189,6 +177,7 @@ impl System {
         for field in self.fields.iter_mut() {
             field.mapv_inplace(|_| distr.sample(rng));
         }
+        self.update();
     }
 
     pub fn guess_fields(&mut self) {
@@ -197,6 +186,7 @@ impl System {
         }
         self.interaction
             .add_gradients(&self.concentrations, &mut self.fields);
+        self.update()
     }
 
     /// Update the system state.
@@ -358,7 +348,6 @@ mod tests {
     fn test_free_energy() {
         let mesh = Mesh::Two(32, 32);
         let cell = UnitCell::square(10.0).unwrap();
-        let domain = Domain::new(mesh, cell).unwrap();
 
         let monomer_a = Monomer::new(0, 1.0);
         let monomer_b = Monomer::new(1, 1.0);
@@ -368,11 +357,9 @@ mod tests {
         let point = Point::new(monomer_b, 0.5);
         let species: Vec<Species> = vec![polymer.into(), point.into()];
 
-        let mut itx = Interaction::new(2);
-        itx.set_chi(0, 1, 0.25);
-
         // When: System initialized with zero fields (concentration is equal to bulk values)
-        let mut system = System::new(domain, itx, species).unwrap();
+        let mut system = System::new(mesh, cell, species).unwrap();
+        system.interaction_mut().set_chi(0, 1, 0.25);
         system.update();
 
         // Then: Free energy should be equal to its bulk value
