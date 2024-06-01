@@ -6,10 +6,9 @@ mod utils;
 
 use pyo3::prelude::*;
 
-// PyFTS Module
+// FTS Python Module
 #[pymodule]
-#[pyo3(name = "_core")]
-fn pyfts(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn fts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Chem
     m.add_class::<chem::PyMonomer>()?;
     m.add_class::<chem::PyBlock>()?;

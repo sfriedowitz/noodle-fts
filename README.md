@@ -2,10 +2,6 @@
 
 Polymer field-theoretic simulations in Rust, with bindings in Python.
 
-## Core
-
-## Python
-
 ## References
 
 1) [Polymer Self-Consistent Field Theory (PSCF)](https://github.com/dmorse/pscfpp/tree/master)

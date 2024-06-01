@@ -1,15 +1,15 @@
-use fts::chem::{Block, Monomer, Point, Polymer, Species, SpeciesDescription};
 use pyo3::prelude::*;
 
-use crate::impl_conversions;
+use crate::{
+    chem::{Block, Monomer, Point, Polymer, Species, SpeciesDescription},
+    impl_py_conversions,
+};
 
 #[pyclass(name = "Monomer", module = "pyfts.chem", frozen)]
 #[derive(Clone, Copy)]
-pub struct PyMonomer {
-    core: Monomer,
-}
+pub struct PyMonomer(Monomer);
 
-impl_conversions!(Monomer, PyMonomer);
+impl_py_conversions!(Monomer, PyMonomer);
 
 #[pymethods]
 impl PyMonomer {
@@ -20,22 +20,20 @@ impl PyMonomer {
 
     #[getter]
     fn get_id(&self) -> usize {
-        self.core.id
+        self.0.id
     }
 
     #[getter]
     fn get_size(&self) -> f64 {
-        self.core.size
+        self.0.size
     }
 }
 
 #[pyclass(name = "Block", module = "pyfts.chem", frozen)]
 #[derive(Clone, Copy)]
-pub struct PyBlock {
-    core: Block,
-}
+pub struct PyBlock(Block);
 
-impl_conversions!(Block, PyBlock);
+impl_py_conversions!(Block, PyBlock);
 
 #[pymethods]
 impl PyBlock {
@@ -46,46 +44,44 @@ impl PyBlock {
 
     #[getter]
     fn get_monomer(&self) -> PyMonomer {
-        self.core.monomer.into()
+        self.0.monomer.into()
     }
 
     #[getter]
     fn get_repeat_units(&self) -> usize {
-        self.core.repeat_units
+        self.0.repeat_units
     }
 
     #[getter]
     fn get_segment_length(&self) -> f64 {
-        self.core.segment_length
+        self.0.segment_length
     }
 }
 
 #[pyclass(name = "Species", module = "pyfts.chem", subclass, frozen)]
 #[derive(Clone)]
-pub struct PySpecies {
-    core: Species,
-}
+pub struct PySpecies(Species);
 
-impl_conversions!(Species, PySpecies);
+impl_py_conversions!(Species, PySpecies);
 
 #[pymethods]
 impl PySpecies {
     #[getter]
     fn get_phi(&self) -> f64 {
-        self.core.phi()
+        self.0.phi()
     }
 
     #[getter]
     fn get_size(&self) -> f64 {
-        self.core.size()
+        self.0.size()
     }
 
     fn monomers(&self) -> Vec<PyMonomer> {
-        self.core.monomers().iter().copied().map(|m| m.into()).collect()
+        self.0.monomers().iter().copied().map(|m| m.into()).collect()
     }
 
     fn monomer_fraction(&self, id: usize) -> f64 {
-        self.core.monomer_fraction(id)
+        self.0.monomer_fraction(id)
     }
 }
 
@@ -96,13 +92,13 @@ pub struct PyPoint {}
 impl PyPoint {
     #[new]
     fn __new__(monomer: PyMonomer, phi: f64) -> (Self, PySpecies) {
-        let point: Species = Point::new(monomer.core, phi).into();
+        let point: Species = Point::new(monomer.0, phi).into();
         let base: PySpecies = point.into();
         (PyPoint {}, base)
     }
 }
 
-#[pyclass(name = "Polymer", module = "pyfts.chem", extends=PySpecies, frozen)]
+#[pyclass(name = "Polymer", extends=PySpecies, frozen)]
 pub struct PyPolymer {}
 
 #[pymethods]
@@ -118,7 +114,7 @@ impl PyPolymer {
     #[getter]
     fn get_blocks(self_: PyRef<'_, Self>) -> Vec<PyBlock> {
         let super_ = self_.as_ref();
-        match &super_.core {
+        match &super_.0 {
             Species::Polymer(polymer) => polymer.blocks.iter().cloned().map(|b| b.into()).collect(),
             // Should not be reachable
             _ => panic!("PyPolymer didn't contain a Polymer species"),

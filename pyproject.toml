@@ -1,0 +1,19 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pyfts"
+requires-python = ">=3.10"
+dynamic = ['description', 'license', 'readme', 'version']
+
+dependencies = ["numpy==1.26.4"]
+
+[project.optional-dependencies]
+test = ["pytest==8.2.1", "pytest-cov[all]"]
+all = ["pyfts[test]"]
+
+[tool.maturin]
+bindings = "pyo3"
+features = ["python"]
+module-name = "pyfts"

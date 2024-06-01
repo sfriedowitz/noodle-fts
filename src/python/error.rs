@@ -1,5 +1,6 @@
-use fts::Result;
 use pyo3::{exceptions::PyException, PyResult};
+
+use crate::Result;
 
 pub struct ToPyResult<T>(pub Result<T>);
 

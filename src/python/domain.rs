@@ -1,16 +1,17 @@
-use fts::domain::{Mesh, UnitCell};
 use numpy::{IntoPyArray, PyArray2};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple};
 
-use crate::{error::ToPyResult, impl_conversions};
+use super::error::ToPyResult;
+use crate::{
+    domain::{Mesh, UnitCell},
+    impl_py_conversions,
+};
 
-#[pyclass(name = "Mesh", module = "pyfts._core", frozen)]
+#[pyclass(name = "Mesh", frozen)]
 #[derive(Clone, Copy)]
-pub struct PyMesh {
-    core: Mesh,
-}
+pub struct PyMesh(Mesh);
 
-impl_conversions!(Mesh, PyMesh);
+impl_py_conversions!(Mesh, PyMesh);
 
 #[pymethods]
 impl PyMesh {
@@ -31,42 +32,40 @@ impl PyMesh {
 
     #[getter]
     fn get_size(&self) -> usize {
-        self.core.size()
+        self.0.size()
     }
 
     #[getter]
     fn get_dimensions(&self) -> Vec<usize> {
-        self.core.dimensions()
+        self.0.dimensions()
     }
 }
 
-#[pyclass(name = "UnitCell", module = "pyfts._core", subclass)]
+#[pyclass(name = "UnitCell", subclass)]
 #[derive(Clone)]
-pub struct PyUnitCell {
-    core: UnitCell,
-}
+pub struct PyUnitCell(UnitCell);
 
-impl_conversions!(UnitCell, PyUnitCell);
+impl_py_conversions!(UnitCell, PyUnitCell);
 
 #[pymethods]
 impl PyUnitCell {
     #[getter]
     fn get_parameters(&self) -> Vec<f64> {
-        self.core.parameters().into()
+        self.0.parameters().into()
     }
 
     #[getter]
     fn get_shape<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.core.shape().clone().into_pyarray_bound(py)
+        self.0.shape().clone().into_pyarray_bound(py)
     }
 
     #[getter]
     fn get_metric<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.core.metric().clone().into_pyarray_bound(py)
+        self.0.metric().clone().into_pyarray_bound(py)
     }
 }
 
-#[pyclass(name = "LamellarCell", module = "pyfts._core", extends=PyUnitCell)]
+#[pyclass(name = "LamellarCell", extends=PyUnitCell)]
 pub struct PyLamellarCell {}
 
 #[pymethods]
