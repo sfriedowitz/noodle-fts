@@ -1,14 +1,14 @@
 mod chem;
 mod domain;
 mod error;
+mod simulation;
 mod system;
 mod utils;
 
 use pyo3::prelude::*;
 
-// FTS Python Module
 #[pymodule]
-fn fts(m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn pyfts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Chem
     m.add_class::<chem::PyMonomer>()?;
     m.add_class::<chem::PyBlock>()?;
@@ -20,5 +20,10 @@ fn fts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<domain::PyUnitCell>()?;
     m.add_class::<domain::PyLamellarCell>()?;
     // System
+    m.add_class::<system::PySystem>()?;
+    // Simulation
+    m.add_class::<simulation::PySCFTConfig>()?;
+    m.add_class::<simulation::PySCFTState>()?;
+    m.add_function(wrap_pyfunction!(simulation::scft, m)?)?;
     Ok(())
 }

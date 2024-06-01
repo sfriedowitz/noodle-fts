@@ -15,5 +15,5 @@ all = ["pyfts[test]"]
 
 [tool.maturin]
 bindings = "pyo3"
-features = ["python"]
+features = ["pyo3/extension-module", "python"]
 module-name = "pyfts"

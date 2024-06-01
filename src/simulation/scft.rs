@@ -1,12 +1,22 @@
 use std::time::{Duration, Instant};
 
-use crate::{simulation::FieldUpdater, system::System};
+use crate::system::{FieldUpdater, System};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SCFTConfig {
     pub steps: usize,
     pub step_size: f64,
     pub field_tolerance: f64,
+}
+
+impl Default for SCFTConfig {
+    fn default() -> Self {
+        Self {
+            steps: 100,
+            step_size: 0.1,
+            field_tolerance: 1e-5,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

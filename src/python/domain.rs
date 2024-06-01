@@ -7,7 +7,7 @@ use crate::{
     impl_py_conversions,
 };
 
-#[pyclass(name = "Mesh", frozen)]
+#[pyclass(name = "Mesh", module = "pyfts", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyMesh(Mesh);
 
@@ -41,7 +41,7 @@ impl PyMesh {
     }
 }
 
-#[pyclass(name = "UnitCell", subclass)]
+#[pyclass(name = "UnitCell", module = "pyfts", subclass)]
 #[derive(Clone)]
 pub struct PyUnitCell(UnitCell);
 
@@ -65,7 +65,7 @@ impl PyUnitCell {
     }
 }
 
-#[pyclass(name = "LamellarCell", extends=PyUnitCell)]
+#[pyclass(name = "LamellarCell", module = "pyfts", extends=PyUnitCell)]
 pub struct PyLamellarCell {}
 
 #[pymethods]

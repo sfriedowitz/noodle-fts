@@ -5,7 +5,7 @@ use crate::{
     impl_py_conversions,
 };
 
-#[pyclass(name = "Monomer", module = "pyfts.chem", frozen)]
+#[pyclass(name = "Monomer", module = "pyfts", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyMonomer(Monomer);
 
@@ -29,7 +29,7 @@ impl PyMonomer {
     }
 }
 
-#[pyclass(name = "Block", module = "pyfts.chem", frozen)]
+#[pyclass(name = "Block", module = "pyfts", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyBlock(Block);
 
@@ -58,7 +58,7 @@ impl PyBlock {
     }
 }
 
-#[pyclass(name = "Species", module = "pyfts.chem", subclass, frozen)]
+#[pyclass(name = "Species", module = "pyfts", subclass, frozen)]
 #[derive(Clone)]
 pub struct PySpecies(Species);
 
@@ -85,7 +85,7 @@ impl PySpecies {
     }
 }
 
-#[pyclass(name = "Point", module = "pyfts.chem", extends=PySpecies, frozen)]
+#[pyclass(name = "Point", module = "pyfts", extends=PySpecies, frozen)]
 pub struct PyPoint {}
 
 #[pymethods]
@@ -98,7 +98,7 @@ impl PyPoint {
     }
 }
 
-#[pyclass(name = "Polymer", extends=PySpecies, frozen)]
+#[pyclass(name = "Polymer", module = "pyfts", extends=PySpecies, frozen)]
 pub struct PyPolymer {}
 
 #[pymethods]
@@ -117,7 +117,7 @@ impl PyPolymer {
         match &super_.0 {
             Species::Polymer(polymer) => polymer.blocks.iter().cloned().map(|b| b.into()).collect(),
             // Should not be reachable
-            _ => panic!("PyPolymer didn't contain a Polymer species"),
+            _ => panic!("PyPolymer does not contain a Polymer species"),
         }
     }
 }
