@@ -1,11 +1,9 @@
-use std::time::Instant;
-
-use fts::{chem::*, domain::*, system::*};
+use fts::{chem::*, domain::*, simulation::*, system::*};
 use ndarray_rand::rand_distr::Normal;
 
 fn main() {
-    let mesh = Mesh::Two(64, 64);
-    let cell = UnitCell::square(10.0).unwrap();
+    let mesh = Mesh::One(256);
+    let cell = UnitCell::lamellar(10.0).unwrap();
     let domain = Domain::new(mesh, cell).unwrap();
 
     let monomer_a = Monomer::new(0, 1.0);
@@ -27,26 +25,13 @@ fn main() {
     system.sample_fields(&distr, &mut rng);
     system.update();
 
-    let mut updater = FieldUpdater::new(&system, 0.25, Some(1e-5));
-
-    let total = Instant::now();
-    for step in 0..1000 {
-        let now = Instant::now();
-        updater.step(&mut system);
-        let elapsed = now.elapsed().as_secs_f64();
-        let f = system.free_energy();
-        let err = system.field_error();
-        println!(
-            "Step = {}, f = {:.5}, err = {:.5e}, time = {:.5e}",
-            step, f, err, elapsed
-        );
-        if updater.is_converged(&system) {
-            break;
-        }
-        if f.is_nan() {
-            break;
-        }
-    }
-    println!("Total time = {:.5} sec", total.elapsed().as_secs_f64());
-    // dbg!(system.total_concentration());
+    // SCFT
+    let parameters = SCFTParameters {
+        nstep: 1000,
+        dt: 0.25,
+        etol: 1e-5,
+    };
+    let simulation = SCFT::new(parameters);
+    let result = simulation.run(&mut system);
+    dbg!(result);
 }

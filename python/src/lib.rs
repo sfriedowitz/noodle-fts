@@ -1,6 +1,7 @@
 mod chem;
 mod domain;
 mod error;
+mod system;
 mod utils;
 
 use pyo3::prelude::*;
@@ -19,5 +20,6 @@ fn pyfts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<domain::PyMesh>()?;
     m.add_class::<domain::PyUnitCell>()?;
     m.add_class::<domain::PyLamellarCell>()?;
+    // System
     Ok(())
 }
