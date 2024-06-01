@@ -11,6 +11,10 @@ description = "Core FTS library written in Rust."
 name = "fts"
 path = "src/lib.rs"
 
+[main]
+name = "fts"
+path = "src/main.rs"
+
 [features]
 "openblas" = ["ndarray-linalg/openblas"]
 "openblas-system" = ["ndarray-linalg/openblas-system"]
@@ -27,4 +31,3 @@ ndarray-linalg = "0.16.0"
 ndarray-rand = "0.14.0"
 thiserror = "1.0.61"
 rand = "0.8.5"
-fftw = "0.8.0"

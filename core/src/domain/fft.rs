@@ -1,8 +1,8 @@
 use std::fmt;
 
 use ndrustfft::{
-    ndfft, ndfft_par, ndfft_r2c, ndfft_r2c_par, ndifft, ndifft_par, ndifft_r2c, ndifft_r2c_par,
-    FftHandler, R2cFftHandler,
+    ndfft, ndfft_par, ndfft_r2c, ndfft_r2c_par, ndifft, ndifft_par, ndifft_r2c, ndifft_r2c_par, FftHandler,
+    R2cFftHandler,
 };
 
 use super::Mesh;

@@ -18,12 +18,8 @@ pub struct PolymerSolver {
 impl PolymerSolver {
     pub fn new(mesh: Mesh, species: Polymer) -> Self {
         let block_solvers = Self::build_block_solvers(mesh, &species);
-        let concentrations = HashMap::from_iter(
-            species
-                .monomers()
-                .iter()
-                .map(|m| (m.id, RField::zeros(mesh))),
-        );
+        let concentrations =
+            HashMap::from_iter(species.monomers().iter().map(|m| (m.id, RField::zeros(mesh))));
         Self {
             species,
             block_solvers,
@@ -72,14 +68,14 @@ impl SolverOps for PolymerSolver {
         // Propagate forward (initialize first solver w/ empty source)
         let mut source: Option<&RField> = None;
         for solver in self.block_solvers.iter_mut() {
-            solver.solve(source, PropagatorDirection::Forward, StepMethod::RQM4);
+            solver.solve(source, PropagatorDirection::Forward, StepMethod::RK2);
             source = Some(solver.forward().tail());
         }
 
         // Propagate reverse (initialize last solver w/ empty source)
         source = None;
         for solver in self.block_solvers.iter_mut().rev() {
-            solver.solve(source, PropagatorDirection::Reverse, StepMethod::RQM4);
+            solver.solve(source, PropagatorDirection::Reverse, StepMethod::RK2);
             source = Some(solver.reverse().tail());
         }
 
