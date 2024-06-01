@@ -66,7 +66,7 @@ impl PySCFTState {
 }
 
 #[pyfunction]
-#[pyo3(signature = (system, *, config=None))]
+#[pyo3(signature = (system, config=None))]
 pub fn scft(system: &Bound<'_, PySystem>, config: Option<PySCFTConfig>) -> PyResult<PySCFTState> {
     let config = config.map(|c| c.into()).unwrap_or(SCFTConfig::default());
     let simulation = SCFT::new(config);

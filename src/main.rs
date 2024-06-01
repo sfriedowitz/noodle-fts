@@ -3,8 +3,8 @@ use ndarray_rand::rand_distr::Normal;
 use rand::{rngs::SmallRng, SeedableRng};
 
 fn main() {
-    let mesh = Mesh::Two(256, 256);
-    let cell = UnitCell::square(10.0).unwrap();
+    let mesh = Mesh::One(128);
+    let cell = UnitCell::lamellar(10.0).unwrap();
 
     let monomer_a = Monomer::new(0, 1.0);
     let monomer_b = Monomer::new(1, 1.0);

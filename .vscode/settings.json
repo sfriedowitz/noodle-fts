@@ -8,4 +8,7 @@
             "source.organizeImports.ruff": "explicit"
         }
     },
+    "rust-analyzer.cargo.features": [
+        "python"
+    ],
 }
