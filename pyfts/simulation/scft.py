@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from tqdm import tqdm
+
 from pyfts import FieldUpdater, System
 
 
@@ -19,22 +21,23 @@ def scft(
     updater: FieldUpdater,
     *,
     steps: int = 100,
-    field_tolerance: float = 1e-5,
+    stopping_tolerance: float = 1e-5,
 ) -> SCFTState:
     start = datetime.now()
-    for step in range(steps):
-        state = _get_state(system, start, step, field_tolerance)
+    pbar = tqdm(range(steps), desc="SCFT")
+    for step in pbar:
+        state = _get_state(system, start, step, stopping_tolerance)
+        pbar.set_postfix(f=state.free_energy, err=state.field_error)
         if state.is_converged:
             return state
         updater.step(system)
+    return _get_state(system, start, steps, stopping_tolerance)
 
-    return _get_state(system, start, steps, field_tolerance)
 
-
-def _get_state(system: System, start: datetime, step: int, field_tolerance: float) -> SCFTState:
+def _get_state(system: System, start: datetime, step: int, stopping_tolerance: float) -> SCFTState:
     elapsed = datetime.now() - start
     field_error = system.field_error()
-    is_converged = field_error <= field_tolerance
+    is_converged = field_error <= stopping_tolerance
     return SCFTState(
         step=step,
         elapsed=elapsed,

@@ -31,6 +31,26 @@ impl PySystem {
         Ok(Self(system))
     }
 
+    #[getter]
+    fn nmonomer(&self) -> usize {
+        self.0.nmonomer()
+    }
+
+    #[getter]
+    fn nspecies(&self) -> usize {
+        self.0.nspecies()
+    }
+
+    #[getter]
+    fn mesh(&self) -> PyMesh {
+        self.0.domain().mesh().into()
+    }
+
+    #[getter]
+    fn cell(&self, py: Python<'_>) -> PyObject {
+        self.0.domain().cell().clone().into_py(py)
+    }
+
     fn free_energy(&self) -> f64 {
         self.0.free_energy()
     }

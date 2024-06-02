@@ -1,5 +1,6 @@
 from pyfts._core import (
     Block,
+    CubicCell,
     FieldUpdater,
     LamellarCell,
     Mesh,
@@ -7,6 +8,7 @@ from pyfts._core import (
     Point,
     Polymer,
     Species,
+    SquareCell,
     System,
     UnitCell,
 )
@@ -20,6 +22,8 @@ __all__ = [
     "Mesh",
     "UnitCell",
     "LamellarCell",
+    "SquareCell",
+    "CubicCell",
     "System",
     "FieldUpdater",
 ]

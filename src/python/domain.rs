@@ -3,7 +3,7 @@ use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple};
 
 use super::error::ToPyResult;
 use crate::{
-    domain::{Mesh, UnitCell},
+    domain::{CellParameters, Mesh, UnitCell},
     impl_py_conversions,
 };
 
@@ -47,8 +47,36 @@ pub struct PyUnitCell(UnitCell);
 
 impl_py_conversions!(UnitCell, PyUnitCell);
 
+impl IntoPy<PyObject> for UnitCell {
+    /// Convert the UnitCell parameters into the proper sub-class of PyUnitCell.
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        let parameters = self.parameters();
+        let base = PyClassInitializer::from(PyUnitCell(self));
+        match parameters {
+            CellParameters::Lamellar { .. } => {
+                let sub = base.add_subclass(PyLamellarCell {});
+                Py::new(py, sub).unwrap().to_object(py)
+            }
+            CellParameters::Square { .. } => {
+                let sub = base.add_subclass(PySquareCell {});
+                Py::new(py, sub).unwrap().to_object(py)
+            }
+            CellParameters::Cubic { .. } => {
+                let sub = base.add_subclass(PyCubicCell {});
+                Py::new(py, sub).unwrap().to_object(py)
+            }
+            _ => todo!(),
+        }
+    }
+}
+
 #[pymethods]
 impl PyUnitCell {
+    #[getter]
+    fn get_ndim(&self) -> usize {
+        self.0.ndim()
+    }
+
     #[getter]
     fn get_parameters(&self) -> Vec<f64> {
         self.0.parameters().into()
@@ -73,6 +101,32 @@ impl PyLamellarCell {
     #[new]
     fn __new__(a: f64) -> PyResult<(Self, PyUnitCell)> {
         let cell = ToPyResult(UnitCell::lamellar(a)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "SquareCell", module = "pyfts._core", extends=PyUnitCell)]
+pub struct PySquareCell {}
+
+#[pymethods]
+impl PySquareCell {
+    #[new]
+    fn __new__(a: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::square(a)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "CubicCell", module = "pyfts._core", extends=PyUnitCell)]
+pub struct PyCubicCell {}
+
+#[pymethods]
+impl PyCubicCell {
+    #[new]
+    fn __new__(a: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::cubic(a)).into_py()?;
         let base: PyUnitCell = cell.into();
         Ok((Self {}, base))
     }
