@@ -11,14 +11,14 @@ use crate::{fields::RField, system::System};
 /// Reference: https://en.wikipedia.org/wiki/Predictor-corrector_method
 #[derive(Debug, Clone)]
 pub struct FieldUpdater {
-    dt: f64,
+    step_size: f64,
     buffers: Vec<RField>,
 }
 
 impl FieldUpdater {
-    pub fn new(system: &System, dt: f64) -> Self {
+    pub fn new(system: &System, step_size: f64) -> Self {
         Self {
-            dt,
+            step_size,
             buffers: system.fields().to_vec(),
         }
     }
@@ -30,8 +30,8 @@ impl FieldUpdater {
                 .and(buffer)
                 .and(state.residual)
                 .for_each(|w, b, r| {
-                    *w += self.dt * r;
-                    *b = *w + 0.5 * self.dt * r;
+                    *w += self.step_size * r;
+                    *b = *w + 0.5 * self.step_size * r;
                 })
         }
 
@@ -40,7 +40,7 @@ impl FieldUpdater {
 
         // 3) Correct by averaging the "force" at time (t, t+1)
         for (state, buffer) in system.iter().zip(self.buffers.iter_mut()) {
-            buffer.zip_mut_with(state.residual, |b, r| *b += 0.5 * self.dt * r);
+            buffer.zip_mut_with(state.residual, |b, r| *b += 0.5 * self.step_size * r);
         }
 
         // 4) Evaluate the final "force" at time t+1

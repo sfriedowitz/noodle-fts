@@ -5,7 +5,7 @@ use crate::{
     impl_py_conversions,
 };
 
-#[pyclass(name = "Monomer", module = "pyfts", frozen)]
+#[pyclass(name = "Monomer", module = "pyfts._core", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyMonomer(Monomer);
 
@@ -29,7 +29,7 @@ impl PyMonomer {
     }
 }
 
-#[pyclass(name = "Block", module = "pyfts", frozen)]
+#[pyclass(name = "Block", module = "pyfts._core", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyBlock(Block);
 
@@ -58,7 +58,7 @@ impl PyBlock {
     }
 }
 
-#[pyclass(name = "Species", module = "pyfts", subclass, frozen)]
+#[pyclass(name = "Species", module = "pyfts._core", subclass, frozen)]
 #[derive(Clone)]
 pub struct PySpecies(Species);
 
@@ -85,7 +85,7 @@ impl PySpecies {
     }
 }
 
-#[pyclass(name = "Point", module = "pyfts", extends=PySpecies, frozen)]
+#[pyclass(name = "Point", module = "pyfts._core", extends=PySpecies, frozen)]
 pub struct PyPoint {}
 
 #[pymethods]
@@ -98,7 +98,7 @@ impl PyPoint {
     }
 }
 
-#[pyclass(name = "Polymer", module = "pyfts", extends=PySpecies, frozen)]
+#[pyclass(name = "Polymer", module = "pyfts._core", extends=PySpecies, frozen)]
 pub struct PyPolymer {}
 
 #[pymethods]

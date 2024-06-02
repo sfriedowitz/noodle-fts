@@ -1,14 +1,13 @@
 mod chem;
 mod domain;
 mod error;
-mod simulation;
 mod system;
 mod utils;
 
 use pyo3::prelude::*;
 
 #[pymodule]
-pub fn pyfts(m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Chem
     m.add_class::<chem::PyMonomer>()?;
     m.add_class::<chem::PyBlock>()?;
@@ -21,9 +20,6 @@ pub fn pyfts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<domain::PyLamellarCell>()?;
     // System
     m.add_class::<system::PySystem>()?;
-    // Simulation
-    m.add_class::<simulation::PySCFTConfig>()?;
-    m.add_class::<simulation::PySCFTState>()?;
-    m.add_function(wrap_pyfunction!(simulation::scft, m)?)?;
+    m.add_class::<system::PyFieldUpdater>()?;
     Ok(())
 }

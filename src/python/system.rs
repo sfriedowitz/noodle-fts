@@ -8,10 +8,13 @@ use super::{
     domain::{PyMesh, PyUnitCell},
     error::ToPyResult,
 };
-use crate::{impl_py_conversions, system::System};
+use crate::{
+    impl_py_conversions,
+    system::{FieldUpdater, System},
+};
 
-#[pyclass(name = "System", module = "pyfts")]
-pub struct PySystem(pub(crate) System);
+#[pyclass(name = "System", module = "pyfts._core")]
+pub struct PySystem(System);
 
 impl_py_conversions!(System, PySystem);
 
@@ -71,5 +74,24 @@ impl PySystem {
         } else {
             Err(PyValueError::new_err(format!("invalid scale parameter: {scale}")))
         }
+    }
+}
+
+#[pyclass(name = "FieldUpdater", module = "pyfts._core")]
+pub struct PyFieldUpdater(FieldUpdater);
+
+impl_py_conversions!(FieldUpdater, PyFieldUpdater);
+
+#[pymethods]
+impl PyFieldUpdater {
+    #[new]
+    fn __new__(system: PyRef<'_, PySystem>, step_size: f64) -> Self {
+        let updater = FieldUpdater::new(&system.0, step_size);
+        Self(updater)
+    }
+
+    fn step(&mut self, system: &Bound<'_, PySystem>) {
+        let system = &mut system.borrow_mut().0;
+        self.0.step(system);
     }
 }
