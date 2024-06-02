@@ -1,5 +1,5 @@
 [package]
-name = "fts"
+name = "noodle-fts"
 edition = "2021"
 version = "0.1.0"
 authors = ["Sean Friedowitz <sfriedowitz93@gmail.com>"]
@@ -8,12 +8,8 @@ license-file = "LICENSE"
 description = "Polymer field-theoretic simulations in Rust."
 
 [lib]
-name = "fts"
+name = "noodle_fts"
 path = "src/lib.rs"
-
-[main]
-name = "fts"
-path = "src/main.rs"
 
 [features]
 "default" = ["openblas-system"]

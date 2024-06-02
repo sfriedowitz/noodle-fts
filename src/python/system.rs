@@ -13,7 +13,7 @@ use crate::{
     system::{FieldUpdater, System},
 };
 
-#[pyclass(name = "System", module = "pyfts._core")]
+#[pyclass(name = "System", module = "pynoodle._core")]
 pub struct PySystem(System);
 
 impl_py_conversions!(System, PySystem);
@@ -97,7 +97,7 @@ impl PySystem {
     }
 }
 
-#[pyclass(name = "FieldUpdater", module = "pyfts._core")]
+#[pyclass(name = "FieldUpdater", module = "pynoodle._core")]
 pub struct PyFieldUpdater(FieldUpdater);
 
 impl_py_conversions!(FieldUpdater, PyFieldUpdater);

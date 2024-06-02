@@ -1,10 +1,10 @@
-# FTS
+# Noodle FTS
 
 Polymer field-theoretic simulations in Rust and Python.
 
 The repository consists of two main components:
 1) The core library written in Rust, located in the [src](src/) folder.
-2) The [pyfts](pyfts) module that depends on [pyo3](https://pyo3.rs/v0.21.2/) bindings to the Rust core.
+2) The [pynoodle](pynoodle/) module that depends on [pyo3](https://pyo3.rs/v0.21.2/) bindings to the Rust core.
 
 > [!NOTE]
 > This is an experimental project in order to to play around with

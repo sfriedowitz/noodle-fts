@@ -50,7 +50,7 @@ ignore = [
 ]
 
 [lint.isort]
-known-first-party = ["pyfts", "tests"]
+known-first-party = ["pynoodle", "tests"]
 
 [format]
 quote-style = "double"
