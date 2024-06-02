@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use ndarray::Zip;
-
 use super::SolverOps;
 use crate::{
     chem::{Point, Species, SpeciesDescription},
@@ -49,12 +47,10 @@ impl SolverOps for PointSolver {
 
         // Compute concentration field and partition function from omega field
         let mut partition_sum = 0.0;
-        Zip::from(concentration.view_mut())
-            .and(field)
-            .for_each(|conc, field| {
-                *conc = (-monomer.size * field).exp();
-                partition_sum += *conc;
-            });
+        concentration.zip_mut_with(field, |c, w| {
+            *c = (-monomer.size * w).exp();
+            partition_sum += *c;
+        });
 
         // Normalize partition sum
         self.partition = partition_sum / self.mesh.size() as f64;
