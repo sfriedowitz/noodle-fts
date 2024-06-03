@@ -179,8 +179,8 @@ impl UnitCell {
     pub fn new(parameters: CellParameters) -> Result<Self> {
         let shape: Array2<f64> = parameters.into();
         let metric = shape.t().dot(&shape);
-        let shape_inv = shape.inv()?;
-        let metric_inv = metric.inv()?;
+        let shape_inv = shape.inv().map_err(Box::from)?;
+        let metric_inv = metric.inv().map_err(Box::from)?;
 
         Ok(Self {
             parameters,

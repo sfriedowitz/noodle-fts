@@ -19,6 +19,7 @@ pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<domain::PyUnitCell>()?;
     m.add_class::<domain::PyLamellarCell>()?;
     m.add_class::<domain::PySquareCell>()?;
+    m.add_class::<domain::PyHexagonal2DCell>()?;
     m.add_class::<domain::PyCubicCell>()?;
     // System
     m.add_class::<system::PySystem>()?;

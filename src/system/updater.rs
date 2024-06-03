@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ndarray::Zip;
 
-use crate::{fields::RField, system::System, Result};
+use crate::{fields::RField, system::System, Error, Result};
 
 /// Field updater implementing a Euler-Maruyama predictor-corrector method.
 ///
@@ -26,9 +26,7 @@ impl FieldUpdater {
     }
 
     fn get_buffer(&mut self, id: usize) -> Result<&mut RField> {
-        self.buffers
-            .get_mut(&id)
-            .ok_or(format!("monomer {id} is not present in field updater").into())
+        self.buffers.get_mut(&id).ok_or(Error::UnknownId(id))
     }
 
     pub fn step(&mut self, system: &mut System) -> Result<()> {

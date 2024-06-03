@@ -11,7 +11,7 @@ use crate::{
     Error, Result,
 };
 
-pub fn initialize_fields(mesh: Mesh, ids: &[usize]) -> HashMap<usize, RField> {
+fn generate_fields(mesh: Mesh, ids: &[usize]) -> HashMap<usize, RField> {
     ids.iter().cloned().map(|id| (id, RField::zeros(mesh))).collect()
 }
 
@@ -48,10 +48,10 @@ impl System {
             .collect();
 
         let mesh = domain.mesh();
-        let fields = initialize_fields(mesh, &monomer_ids);
-        let concentrations = initialize_fields(mesh, &monomer_ids);
-        let residuals = initialize_fields(mesh, &monomer_ids);
-        let potentials = initialize_fields(mesh, &monomer_ids);
+        let fields = generate_fields(mesh, &monomer_ids);
+        let concentrations = generate_fields(mesh, &monomer_ids);
+        let residuals = generate_fields(mesh, &monomer_ids);
+        let potentials = generate_fields(mesh, &monomer_ids);
         let incompressibility = RField::zeros(mesh);
         let total_concentration = RField::zeros(mesh);
 
@@ -139,9 +139,9 @@ impl System {
     }
 
     pub fn assign_field(&mut self, id: usize, new: RFieldView<'_>) -> Result<()> {
-        let current = self.fields.get_mut(&id).ok_or(Error::MissingId(id))?;
+        let current = self.fields.get_mut(&id).ok_or(Error::UnknownId(id))?;
         if new.shape() != current.shape() {
-            Err("new field shape != system mesh shape".into())
+            Err(Error::Shape(current.shape().to_owned(), new.shape().to_owned()))
         } else {
             current.assign(&new);
             Ok(())
@@ -149,9 +149,9 @@ impl System {
     }
 
     pub fn assign_concentration(&mut self, id: usize, new: RFieldView<'_>) -> Result<()> {
-        let current = self.concentrations.get_mut(&id).ok_or(Error::MissingId(id))?;
+        let current = self.concentrations.get_mut(&id).ok_or(Error::UnknownId(id))?;
         if new.shape() != current.shape() {
-            Err("new field shape != system mesh shape".into())
+            Err(Error::Shape(current.shape().to_owned(), new.shape().to_owned()))
         } else {
             current.assign(&new);
             Ok(())

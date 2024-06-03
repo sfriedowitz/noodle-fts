@@ -62,6 +62,7 @@ impl PyUnitCell {
         match parameters {
             CellParameters::Lamellar { .. } => Self::add_subclass(py, base, PyLamellarCell {}),
             CellParameters::Square { .. } => Self::add_subclass(py, base, PySquareCell {}),
+            CellParameters::Hexagonal2D { .. } => Self::add_subclass(py, base, PyHexagonal2DCell {}),
             CellParameters::Cubic { .. } => Self::add_subclass(py, base, PyCubicCell {}),
             _ => todo!(),
         }
@@ -79,6 +80,11 @@ impl PyUnitCell {
 
 #[pymethods]
 impl PyUnitCell {
+    fn __repr__(&self) -> String {
+        // TODO: No idea how to get the name of the subclass at runtime
+        format!("{:?}", self.0.parameters())
+    }
+
     #[getter]
     fn get_ndim(&self) -> usize {
         self.0.ndim()
@@ -121,6 +127,19 @@ impl PySquareCell {
     #[new]
     fn __new__(a: f64) -> PyResult<(Self, PyUnitCell)> {
         let cell = ToPyResult(UnitCell::square(a)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "Hexagonal2DCell", module = "pyfts._core", extends=PyUnitCell)]
+pub struct PyHexagonal2DCell {}
+
+#[pymethods]
+impl PyHexagonal2DCell {
+    #[new]
+    fn __new__(a: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::hexagonal_2d(a)).into_py()?;
         let base: PyUnitCell = cell.into();
         Ok((Self {}, base))
     }

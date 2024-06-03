@@ -5,7 +5,7 @@ use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
     fields::RField,
     utils::math::{fftfreq, rfftfreq, TWO_PI},
-    Result,
+    Error, Result,
 };
 
 fn get_kvecs_1d(nx: usize) -> Array2<f64> {
@@ -51,7 +51,7 @@ pub struct Domain {
 impl Domain {
     pub fn new(mesh: Mesh, cell: UnitCell) -> Result<Self> {
         if mesh.ndim() != cell.ndim() {
-            return Err("mesh dimension != cell dimension".into());
+            return Err(Error::Dimension(mesh.ndim(), cell.ndim()));
         }
         Ok(Self { mesh, cell })
     }
