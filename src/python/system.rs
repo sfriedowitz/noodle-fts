@@ -1,5 +1,5 @@
 use ndarray_rand::rand_distr::Normal;
-use numpy::IntoPyArray;
+use numpy::{IntoPyArray, PyReadonlyArrayDyn};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
 use rand::{rngs::SmallRng, SeedableRng};
 
@@ -13,7 +13,7 @@ use crate::{
     system::{FieldUpdater, System},
 };
 
-#[pyclass(name = "System", module = "pynoodle._core")]
+#[pyclass(name = "System", module = "pyfts._core")]
 pub struct PySystem(System);
 
 impl_py_conversions!(System, PySystem);
@@ -47,8 +47,9 @@ impl PySystem {
     }
 
     #[getter]
-    fn cell(&self, py: Python<'_>) -> PyObject {
-        self.0.domain().cell().clone().into_py(py)
+    fn cell(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let py_cell: PyUnitCell = self.0.domain().cell().clone().into();
+        py_cell.into_subclass(py)
     }
 
     fn free_energy(&self) -> f64 {
@@ -69,7 +70,7 @@ impl PySystem {
 
     fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new_bound(py);
-        for (id, field) in self.0.fields().iter().enumerate() {
+        for (id, field) in self.0.fields().iter() {
             dict.set_item(id, field.clone().into_pyarray_bound(py))?;
         }
         Ok(dict)
@@ -77,10 +78,20 @@ impl PySystem {
 
     fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new_bound(py);
-        for (id, conc) in self.0.concentrations().iter().enumerate() {
+        for (id, conc) in self.0.concentrations().iter() {
             dict.set_item(id, conc.clone().into_pyarray_bound(py))?;
         }
         Ok(dict)
+    }
+
+    fn set_field(&mut self, id: usize, field: PyReadonlyArrayDyn<'_, f64>) -> PyResult<()> {
+        let fview = field.as_array();
+        ToPyResult(self.0.assign_field(id, fview)).into_py()
+    }
+
+    fn set_concentration(&mut self, id: usize, concentration: PyReadonlyArrayDyn<'_, f64>) -> PyResult<()> {
+        let cview = concentration.as_array();
+        ToPyResult(self.0.assign_concentration(id, cview)).into_py()
     }
 
     #[pyo3(signature = (*, scale=0.1, seed=None))]
@@ -97,7 +108,7 @@ impl PySystem {
     }
 }
 
-#[pyclass(name = "FieldUpdater", module = "pynoodle._core")]
+#[pyclass(name = "FieldUpdater", module = "pyfts._core")]
 pub struct PyFieldUpdater(FieldUpdater);
 
 impl_py_conversions!(FieldUpdater, PyFieldUpdater);
@@ -110,8 +121,8 @@ impl PyFieldUpdater {
         Self(updater)
     }
 
-    fn step(&mut self, system: &Bound<'_, PySystem>) {
+    fn step(&mut self, system: &Bound<'_, PySystem>) -> PyResult<()> {
         let system = &mut system.borrow_mut().0;
-        self.0.step(system);
+        ToPyResult(self.0.step(system)).into_py()
     }
 }

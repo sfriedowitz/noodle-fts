@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+import numpy as np
 from tqdm import tqdm
 
 from pynoodle import FieldUpdater, System
@@ -15,6 +16,10 @@ class SCFTState:
     free_energy: float
     free_energy_bulk: float
 
+    @property
+    def is_nan(self) -> bool:
+        return np.any(np.isnan([self.field_error, self.free_energy, self.free_energy_bulk]))
+
 
 def scft(
     system: System,
@@ -28,6 +33,8 @@ def scft(
     for step in pbar:
         state = _get_state(system, start, step, field_tolerance)
         pbar.set_postfix(f=state.free_energy, err=state.field_error)
+        if state.is_nan:
+            raise RuntimeError("System state contains NaN values -- breaking.")
         if state.is_converged:
             return state
         updater.step(system)

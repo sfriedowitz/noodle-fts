@@ -1,14 +1,20 @@
-use ndarray::{ArrayD, Zip};
+use ndarray::{ArrayD, ArrayViewD, Zip};
 use num::complex::Complex64;
 
 /// A multi-dimensional array with dynamic shape.
 pub type Field<T> = ArrayD<T>;
+/// Data view of a multi-dimensional array with dynamic shape.
+pub type FieldView<'a, T> = ArrayViewD<'a, T>;
 
 /// Real-valued multi-dimensional field grid.
 pub type RField = Field<f64>;
+/// Data view of a real-valued multi-dimensional field grid.
+pub type RFieldView<'a> = FieldView<'a, f64>;
 
 /// Complex-valued multi-dimensional field grid.
 pub type CField = Field<Complex64>;
+/// Data view of a complex-valued multi-dimensional field grid.
+pub type CFieldView<'a> = FieldView<'a, Complex64>;
 
 pub trait FieldOps<A> {
     /// Accumulate `f(acc, self, other)` from the initial value `init`.

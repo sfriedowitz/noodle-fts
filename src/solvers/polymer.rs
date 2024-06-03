@@ -59,7 +59,7 @@ impl SolverOps for PolymerSolver {
         &self.concentrations
     }
 
-    fn solve(&mut self, fields: &[RField], ksq: &RField) {
+    fn solve(&mut self, fields: &HashMap<usize, RField>, ksq: &RField) {
         // Update solver steps with current fields
         for solver in self.block_solvers.iter_mut() {
             solver.update_step(&fields, &ksq);
@@ -126,8 +126,8 @@ mod tests {
 
         let mut rng = SmallRng::seed_from_u64(0);
         let distr = Normal::new(0.0, 0.1).unwrap();
-        let fields: Vec<RField> = (0..nmonomer)
-            .map(|_| RField::random_using(mesh, &distr, &mut rng))
+        let fields = (0..nmonomer)
+            .map(|id| (id, RField::random_using(mesh, &distr, &mut rng)))
             .collect();
         let ksq = domain.ksq();
 

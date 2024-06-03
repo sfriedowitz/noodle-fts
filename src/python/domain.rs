@@ -1,5 +1,5 @@
 use numpy::{IntoPyArray, PyArray2};
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple};
+use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple, PyClass};
 
 use super::error::ToPyResult;
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
     impl_py_conversions,
 };
 
-#[pyclass(name = "Mesh", module = "pynoodle._core", frozen)]
+#[pyclass(name = "Mesh", module = "pyfts._core", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyMesh(Mesh);
 
@@ -30,6 +30,14 @@ impl PyMesh {
         mesh.map(Self::from)
     }
 
+    fn __repr__(&self) -> String {
+        match self.0 {
+            Mesh::One(nx) => format!("Mesh({nx})"),
+            Mesh::Two(nx, ny) => format!("Mesh({nx}, {ny})"),
+            Mesh::Three(nx, ny, nz) => format!("Mesh({nx}, {ny}, {nz})"),
+        }
+    }
+
     #[getter]
     fn get_size(&self) -> usize {
         self.0.size()
@@ -41,32 +49,31 @@ impl PyMesh {
     }
 }
 
-#[pyclass(name = "UnitCell", module = "pynoodle._core", subclass)]
+#[pyclass(name = "UnitCell", module = "pyfts._core", subclass)]
 #[derive(Clone)]
 pub struct PyUnitCell(UnitCell);
 
 impl_py_conversions!(UnitCell, PyUnitCell);
 
-impl IntoPy<PyObject> for UnitCell {
-    /// Convert the UnitCell parameters into the proper sub-class of PyUnitCell.
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let parameters = self.parameters();
-        let base = PyClassInitializer::from(PyUnitCell(self));
+impl PyUnitCell {
+    pub fn into_subclass(self, py: Python<'_>) -> PyResult<PyObject> {
+        let parameters = self.0.parameters();
+        let base = PyClassInitializer::from(self);
         match parameters {
-            CellParameters::Lamellar { .. } => {
-                let sub = base.add_subclass(PyLamellarCell {});
-                Py::new(py, sub).unwrap().to_object(py)
-            }
-            CellParameters::Square { .. } => {
-                let sub = base.add_subclass(PySquareCell {});
-                Py::new(py, sub).unwrap().to_object(py)
-            }
-            CellParameters::Cubic { .. } => {
-                let sub = base.add_subclass(PyCubicCell {});
-                Py::new(py, sub).unwrap().to_object(py)
-            }
+            CellParameters::Lamellar { .. } => Self::add_subclass(py, base, PyLamellarCell {}),
+            CellParameters::Square { .. } => Self::add_subclass(py, base, PySquareCell {}),
+            CellParameters::Cubic { .. } => Self::add_subclass(py, base, PyCubicCell {}),
             _ => todo!(),
         }
+    }
+
+    fn add_subclass<S: PyClass<BaseType = Self>>(
+        py: Python<'_>,
+        base: PyClassInitializer<Self>,
+        sub: S,
+    ) -> PyResult<PyObject> {
+        let init = base.add_subclass(sub);
+        Py::new(py, init).map(|obj| obj.to_object(py))
     }
 }
 
@@ -93,7 +100,7 @@ impl PyUnitCell {
     }
 }
 
-#[pyclass(name = "LamellarCell", module = "pynoodle._core", extends=PyUnitCell)]
+#[pyclass(name = "LamellarCell", module = "pyfts._core", extends=PyUnitCell)]
 pub struct PyLamellarCell {}
 
 #[pymethods]
@@ -106,7 +113,7 @@ impl PyLamellarCell {
     }
 }
 
-#[pyclass(name = "SquareCell", module = "pynoodle._core", extends=PyUnitCell)]
+#[pyclass(name = "SquareCell", module = "pyfts._core", extends=PyUnitCell)]
 pub struct PySquareCell {}
 
 #[pymethods]
@@ -119,7 +126,7 @@ impl PySquareCell {
     }
 }
 
-#[pyclass(name = "CubicCell", module = "pynoodle._core", extends=PyUnitCell)]
+#[pyclass(name = "CubicCell", module = "pyfts._core", extends=PyUnitCell)]
 pub struct PyCubicCell {}
 
 #[pymethods]

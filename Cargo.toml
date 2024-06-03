@@ -8,7 +8,7 @@ license-file = "LICENSE"
 description = "Polymer field-theoretic simulations in Rust."
 
 [lib]
-name = "noodle_fts"
+name = "noodle"
 path = "src/lib.rs"
 
 [features]

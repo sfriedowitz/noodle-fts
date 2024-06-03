@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::{propagator::PropagatorDirection, Propagator, PropagatorStep, StepMethod};
 use crate::{
     chem::Block,
@@ -69,8 +71,8 @@ impl BlockSolver {
         propagator.propagate(&mut self.step, method);
     }
 
-    pub fn update_step(&mut self, fields: &[RField], ksq: &RField) {
-        let field = &fields[self.block.monomer.id];
+    pub fn update_step(&mut self, fields: &HashMap<usize, RField>, ksq: &RField) {
+        let field = &fields.get(&self.block.monomer.id).unwrap();
         self.step.update_operators(
             field,
             ksq,
@@ -128,11 +130,13 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(0);
         let distr = Normal::new(0.0, 0.1).unwrap();
         let field = RField::random_using(mesh, &distr, &mut rng);
+
+        let fields = [(0, field)].into();
         let ksq = domain.ksq();
 
         let block = Block::new(Monomer::new(0, 1.0), 100, 1.0);
         let mut solver = BlockSolver::new(block, mesh, 10, 0.1);
-        solver.update_step(&vec![field], &ksq);
+        solver.update_step(&fields, &ksq);
         solver.solve(None, PropagatorDirection::Forward, StepMethod::RK2);
         solver.solve(None, PropagatorDirection::Reverse, StepMethod::RK2);
 

@@ -40,9 +40,9 @@ impl SolverOps for PointSolver {
         &self.concentrations
     }
 
-    fn solve(&mut self, fields: &[RField], _ksq: &RField) {
+    fn solve(&mut self, fields: &HashMap<usize, RField>, _ksq: &RField) {
         let monomer = self.species.monomer;
-        let field = &fields[monomer.id];
+        let field = &fields.get(&monomer.id).unwrap();
         let concentration = self.concentrations.get_mut(&monomer.id).unwrap();
 
         // Compute concentration field and partition function from omega field
@@ -78,7 +78,7 @@ mod tests {
 
         let phi = 0.235;
         let point = Point::new(Monomer::new(0, 1.0), phi);
-        let fields = vec![RField::zeros(mesh); 1];
+        let fields = [(0, RField::zeros(mesh))].into();
         let ksq = domain.ksq();
 
         let mut solver = PointSolver::new(mesh, point);

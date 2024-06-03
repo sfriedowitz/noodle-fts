@@ -13,7 +13,7 @@ pub trait SolverOps {
 
     fn concentrations(&self) -> &HashMap<usize, RField>;
 
-    fn solve(&mut self, fields: &[RField], ksq: &RField);
+    fn solve(&mut self, fields: &HashMap<usize, RField>, ksq: &RField);
 }
 
 #[enum_dispatch(SolverOps)]

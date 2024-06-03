@@ -18,6 +18,12 @@ impl PyMonomer {
         Monomer::new(id, size).into()
     }
 
+    fn __repr__(&self) -> String {
+        let id = self.0.id;
+        let size = self.0.size;
+        format!("Monomer(id={id}, size={size:.2})")
+    }
+
     #[getter]
     fn get_id(&self) -> usize {
         self.0.id
@@ -42,6 +48,13 @@ impl PyBlock {
         Block::new(monomer.into(), repeat_units, segment_length).into()
     }
 
+    fn __repr__(&self) -> String {
+        let id = self.0.monomer.id;
+        let repeat_units = self.0.repeat_units;
+        let segment_length = self.0.segment_length;
+        format!("Block(monomer={id}, repeats={repeat_units}, segment_length={segment_length})")
+    }
+
     #[getter]
     fn get_monomer(&self) -> PyMonomer {
         self.0.monomer.into()
@@ -58,7 +71,7 @@ impl PyBlock {
     }
 }
 
-#[pyclass(name = "Species", module = "pynoodle._core", subclass, frozen)]
+#[pyclass(name = "Species", module = "pyfts._core", subclass, frozen)]
 #[derive(Clone)]
 pub struct PySpecies(Species);
 
@@ -85,7 +98,7 @@ impl PySpecies {
     }
 }
 
-#[pyclass(name = "Point", module = "pynoodle._core", extends=PySpecies, frozen)]
+#[pyclass(name = "Point", module = "pyfts._core", extends=PySpecies, frozen)]
 pub struct PyPoint {}
 
 #[pymethods]
@@ -98,7 +111,7 @@ impl PyPoint {
     }
 }
 
-#[pyclass(name = "Polymer", module = "pynoodle._core", extends=PySpecies, frozen)]
+#[pyclass(name = "Polymer", module = "pyfts._core", extends=PySpecies, frozen)]
 pub struct PyPolymer {}
 
 #[pymethods]
