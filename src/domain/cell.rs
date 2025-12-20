@@ -1,6 +1,6 @@
 use float_cmp::approx_eq;
 use ndarray::{array, Array2};
-use ndarray_linalg::Inverse;
+use ndarray_linalg::{Determinant, Inverse};
 
 use crate::{
     utils::math::{HALF_PI, THIRD_PI},
@@ -282,6 +282,11 @@ impl UnitCell {
     pub fn metric_inv(&self) -> &Array2<f64> {
         &self.metric_inv
     }
+
+    /// Get the cell volume (determinant of shape matrix).
+    pub fn volume(&self) -> f64 {
+        self.shape.det().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -352,5 +357,14 @@ mod tests {
             check_cell_inverses(&cell);
             check_cell_symmetry(&cell);
         }
+    }
+
+    #[test]
+    fn test_volume_3d() {
+        let cell = UnitCell::cubic(10.0).unwrap();
+        assert!((cell.volume() - 1000.0).abs() < 1e-10);
+
+        let cell = UnitCell::orthorhombic(10.0, 5.0, 2.0).unwrap();
+        assert!((cell.volume() - 100.0).abs() < 1e-10);
     }
 }

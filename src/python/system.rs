@@ -1,7 +1,7 @@
 use ndarray_rand::rand_distr::Normal;
 use numpy::{IntoPyArray, PyReadonlyArrayDyn};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
-use rand::{rngs::SmallRng, SeedableRng};
+use rand::{SeedableRng, rngs::SmallRng};
 
 use super::{
     chem::PySpecies,
@@ -13,7 +13,7 @@ use crate::{
     system::{FieldUpdater, System},
 };
 
-#[pyclass(name = "System", module = "pyfts._core")]
+#[pyclass(name = "System", module = "pynoodle._core")]
 pub struct PySystem(System);
 
 impl_py_conversions!(System, PySystem);
@@ -47,7 +47,7 @@ impl PySystem {
     }
 
     #[getter]
-    fn cell(&self, py: Python<'_>) -> PyResult<PyObject> {
+    fn cell(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let py_cell: PyUnitCell = self.0.domain().cell().clone().into();
         py_cell.into_subclass(py)
     }
@@ -64,24 +64,28 @@ impl PySystem {
         self.0.field_error()
     }
 
+    fn stress(&mut self) -> Vec<f64> {
+        self.0.stress()
+    }
+
     fn set_interaction(&mut self, i: usize, j: usize, chi: f64) {
         self.0.interaction_mut().set_chi(i, j, chi)
     }
 
-    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new_bound(py);
+    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Py<PyDict>> {
+        let dict = PyDict::new(py);
         for (id, field) in self.0.fields().iter() {
-            dict.set_item(id, field.clone().into_pyarray_bound(py))?;
+            dict.set_item(id, field.clone().into_pyarray(py))?;
         }
-        Ok(dict)
+        Ok(dict.into())
     }
 
-    fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new_bound(py);
+    fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Py<PyDict>> {
+        let dict = PyDict::new(py);
         for (id, conc) in self.0.concentrations().iter() {
-            dict.set_item(id, conc.clone().into_pyarray_bound(py))?;
+            dict.set_item(id, conc.clone().into_pyarray(py))?;
         }
-        Ok(dict)
+        Ok(dict.into())
     }
 
     fn set_field(&mut self, id: usize, field: PyReadonlyArrayDyn<'_, f64>) -> PyResult<()> {
@@ -99,7 +103,7 @@ impl PySystem {
         if let Ok(distr) = Normal::new(0.0, scale) {
             let mut rng = seed
                 .map(SmallRng::seed_from_u64)
-                .unwrap_or(SmallRng::from_entropy());
+                .unwrap_or_else(SmallRng::from_os_rng);
             self.0.sample_fields(&distr, &mut rng);
             Ok(())
         } else {
@@ -108,7 +112,7 @@ impl PySystem {
     }
 }
 
-#[pyclass(name = "FieldUpdater", module = "pyfts._core")]
+#[pyclass(name = "FieldUpdater", module = "pynoodle._core")]
 pub struct PyFieldUpdater(FieldUpdater);
 
 impl_py_conversions!(FieldUpdater, PyFieldUpdater);

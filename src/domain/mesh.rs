@@ -35,6 +35,14 @@ impl Mesh {
     pub fn size(&self) -> usize {
         self.dimensions().iter().product()
     }
+
+    pub fn stress_components(&self) -> usize {
+        match self {
+            Self::One(_) => 1,
+            Self::Two(_, _) => 3,
+            Self::Three(_, _, _) => 6,
+        }
+    }
 }
 
 // Allows the `Mesh` type to be used as dimensions for ndarray creation

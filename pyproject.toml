@@ -1,20 +1,18 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
 [project]
 name = "pynoodle"
 requires-python = ">=3.10"
 dynamic = ['description', 'license', 'readme', 'version']
 
-dependencies = ["numpy>=1.26,<2", "matplotlib>=3.9,<4", "tqdm>=4.66,<5"]
+dependencies = ["matplotlib>=3.10.8", "numpy>=1.26.4"]
 
-[project.optional-dependencies]
-dev = ["jupyter"]
-test = ["pytest==8.2.1", "pytest-cov[all]"]
-all = ["pynoodle[dev,test]"]
+[dependency-groups]
+dev = ["jupyter>=1.1.1", "maturin>=1.10.2", "pytest>=8.2.1", "ruff>=0.14.10"]
 
 [tool.maturin]
 bindings = "pyo3"
 features = ["pyo3/extension-module", "python"]
 module-name = "pynoodle._core"
-
-[build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"

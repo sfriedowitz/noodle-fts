@@ -17,7 +17,6 @@ pub enum PropagatorDirection {
 
 #[derive(Debug)]
 pub struct PropagatorStep {
-    fft: FFT,
     // Operator arrays
     lw1: RField,
     lw2: RField,
@@ -35,7 +34,6 @@ impl PropagatorStep {
     pub fn new(mesh: Mesh) -> Self {
         let kmesh = mesh.kmesh();
         Self {
-            fft: FFT::new(mesh),
             lw1: RField::zeros(mesh),
             lw2: RField::zeros(mesh),
             lk1: CField::zeros(kmesh),
@@ -75,18 +73,18 @@ impl PropagatorStep {
             .zip_mut_with(ksq, |op, k2| *op = (-lk_coeff * k2 / 2.0).exp().into());
     }
 
-    pub fn apply(&mut self, q_in: &RField, q_out: &mut RField, method: StepMethod) {
+    pub fn apply(&mut self, q_in: &RField, q_out: &mut RField, method: StepMethod, fft: &mut FFT) {
         match method {
             StepMethod::RK2 => {
                 // Full step to populate q1
-                self.step_full(q_in);
+                self.step_full(q_in, fft);
                 // Copy into output array
                 q_out.assign(&self.q1)
             }
             StepMethod::RQM4 => {
                 // Full step and double-half step to populate q1 and q2
-                self.step_full(q_in);
-                self.step_double_half(q_in);
+                self.step_full(q_in, fft);
+                self.step_double_half(q_in, fft);
                 // Richardson extrapolation of the results
                 q_out.zip_mut_with_two(&self.q1, &self.q2, |out, full, half| {
                     *out = (4.0 * half - full) / 3.0
@@ -95,48 +93,48 @@ impl PropagatorStep {
         }
     }
 
-    fn step_full(&mut self, q_in: &RField) {
+    fn step_full(&mut self, q_in: &RField, fft: &mut FFT) {
         // Apply lw1 to q_in, store in qr
         self.qr.zip_mut_with_two(&self.lw1, q_in, |z, x, y| *z = x * y);
 
         // Forward FFT into qk
-        self.fft.forward(&self.qr, &mut self.qk);
+        fft.forward(&self.qr, &mut self.qk);
 
         // Apply lk1 to qk
         self.qk *= &self.lk1;
 
         // Inverse FFT into qr
-        self.fft.inverse(&self.qk, &mut self.qr);
+        fft.inverse(&self.qk, &mut self.qr);
 
         // Apply lw1 operator to qr, store in q1
         self.q1
             .zip_mut_with_two(&self.lw1, &self.qr, |z, x, y| *z = x * y);
     }
 
-    fn step_double_half(&mut self, q_in: &RField) {
+    fn step_double_half(&mut self, q_in: &RField, fft: &mut FFT) {
         // Apply lw2 to q_in, store in qr
         self.qr.zip_mut_with_two(&self.lw2, q_in, |z, x, y| *z = x * y);
 
         // Forward FFT into qk
-        self.fft.forward(&self.qr, &mut self.qk);
+        fft.forward(&self.qr, &mut self.qk);
 
         // Apply lk2 to qk
         self.qk *= &self.lk2;
 
         // Inverse FFT into qr
-        self.fft.inverse(&self.qk, &mut self.qr);
+        fft.inverse(&self.qk, &mut self.qr);
 
         // Apply lw1 to qr
         self.qr *= &self.lw1;
 
         // Forward FFT into qk
-        self.fft.forward(&self.qr, &mut self.qk);
+        fft.forward(&self.qr, &mut self.qk);
 
         // Apply lk2 to qk
         self.qk *= &self.lk2;
 
         // Inverse FFT into qr
-        self.fft.inverse(&self.qk, &mut self.qr);
+        fft.inverse(&self.qk, &mut self.qr);
 
         // Apply lk2 operator to qr, store in q2
         self.q2
@@ -192,12 +190,12 @@ impl Propagator {
         }
     }
 
-    pub fn propagate(&mut self, step: &mut PropagatorStep, method: StepMethod) {
+    pub fn propagate(&mut self, fft: &mut FFT, step: &mut PropagatorStep, method: StepMethod) {
         for s in 1..self.ns() {
             let (left, right) = self.qfields.split_at_mut(s);
             let q_in = &left[left.len() - 1];
             let q_out = &mut right[0];
-            step.apply(q_in, q_out, method)
+            step.apply(q_in, q_out, method, fft)
         }
     }
 }
