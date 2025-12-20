@@ -7,7 +7,11 @@ name = "pynoodle"
 requires-python = ">=3.12"
 dynamic = ['description', 'license', 'readme', 'version']
 
-dependencies = ["matplotlib>=3.10.8", "numpy>=1.26.4"]
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=1.26.4",
+    "tqdm>=4.67.1",
+]
 
 [dependency-groups]
 dev = ["jupyter>=1.1.1", "maturin>=1.10.2", "pytest>=8.2.1", "ruff>=0.14.10"]
