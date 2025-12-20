@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pynoodle"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dynamic = ['description', 'license', 'readme', 'version']
 
 dependencies = ["matplotlib>=3.10.8", "numpy>=1.26.4"]
@@ -16,3 +16,38 @@ dev = ["jupyter>=1.1.1", "maturin>=1.10.2", "pytest>=8.2.1", "ruff>=0.14.10"]
 bindings = "pyo3"
 features = ["pyo3/extension-module", "python"]
 module-name = "pynoodle._core"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 99
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "UP",  # pyupgrade
+    "I",   # import sorting
+    "N",   # pep8 naming
+    "ISC", # flake8 implicit string concat
+    "PTH", # flake8-use-pathlib use Path library
+]
+
+ignore = [
+    "D417", # documentation for every function parameter.
+    "N806", # ignore uppercased variables
+    "N812", # import as uppercased
+    "N803", # lowercased args
+    "N817", # imported as acryonym
+    "B023", # doesn't bind loop var, we do this a lot in torch
+    "D100", # module-level docstrings
+    "N805", # first param needs to be self; pydantic breaks this sometimes
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pynoodle", "tests"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+skip-magic-trailing-comma = false
