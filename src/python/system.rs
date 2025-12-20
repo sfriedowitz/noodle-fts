@@ -1,5 +1,5 @@
 use ndarray_rand::rand_distr::Normal;
-use numpy::{IntoPyArray, PyReadonlyArrayDyn};
+use numpy::{PyReadonlyArrayDyn, ToPyArray};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
 use rand::{SeedableRng, rngs::SmallRng};
 
@@ -75,7 +75,7 @@ impl PySystem {
     fn fields<'py>(&self, py: Python<'py>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);
         for (id, field) in self.0.fields().iter() {
-            dict.set_item(id, field.clone().into_pyarray(py))?;
+            dict.set_item(id, field.clone().to_pyarray(py))?;
         }
         Ok(dict.into())
     }
@@ -83,7 +83,7 @@ impl PySystem {
     fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);
         for (id, conc) in self.0.concentrations().iter() {
-            dict.set_item(id, conc.clone().into_pyarray(py))?;
+            dict.set_item(id, conc.clone().to_pyarray(py))?;
         }
         Ok(dict.into())
     }

@@ -1,4 +1,4 @@
-use numpy::{IntoPyArray, PyArray2};
+use numpy::{PyArray2, ToPyArray};
 use pyo3::{PyClass, exceptions::PyValueError, prelude::*, types::PyTuple};
 
 use super::error::ToPyResult;
@@ -98,12 +98,12 @@ impl PyUnitCell {
 
     #[getter]
     fn get_shape<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.shape().clone().into_pyarray(py)
+        self.0.shape().clone().to_pyarray(py)
     }
 
     #[getter]
     fn get_metric<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.metric().clone().into_pyarray(py)
+        self.0.metric().clone().to_pyarray(py)
     }
 }
 
