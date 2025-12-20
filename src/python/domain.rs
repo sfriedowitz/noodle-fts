@@ -49,7 +49,7 @@ impl PyMesh {
     }
 }
 
-#[pyclass(name = "UnitCell", module = "pyfts._core", subclass)]
+#[pyclass(name = "UnitCell", module = "pynoodle._core", subclass)]
 #[derive(Clone)]
 pub struct PyUnitCell(UnitCell);
 
@@ -107,7 +107,7 @@ impl PyUnitCell {
     }
 }
 
-#[pyclass(name = "LamellarCell", module = "pyfts._core", extends=PyUnitCell)]
+#[pyclass(name = "LamellarCell", module = "pynoodle._core", extends=PyUnitCell)]
 pub struct PyLamellarCell {}
 
 #[pymethods]
@@ -120,7 +120,7 @@ impl PyLamellarCell {
     }
 }
 
-#[pyclass(name = "SquareCell", module = "pyfts._core", extends=PyUnitCell)]
+#[pyclass(name = "SquareCell", module = "pynoodle._core", extends=PyUnitCell)]
 pub struct PySquareCell {}
 
 #[pymethods]
@@ -133,7 +133,7 @@ impl PySquareCell {
     }
 }
 
-#[pyclass(name = "Hexagonal2DCell", module = "pyfts._core", extends=PyUnitCell)]
+#[pyclass(name = "Hexagonal2DCell", module = "pynoodle._core", extends=PyUnitCell)]
 pub struct PyHexagonal2DCell {}
 
 #[pymethods]
@@ -146,7 +146,7 @@ impl PyHexagonal2DCell {
     }
 }
 
-#[pyclass(name = "CubicCell", module = "pyfts._core", extends=PyUnitCell)]
+#[pyclass(name = "CubicCell", module = "pynoodle._core", extends=PyUnitCell)]
 pub struct PyCubicCell {}
 
 #[pymethods]

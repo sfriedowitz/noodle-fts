@@ -71,7 +71,7 @@ impl PyBlock {
     }
 }
 
-#[pyclass(name = "Species", module = "pyfts._core", subclass, frozen)]
+#[pyclass(name = "Species", module = "pynoodle._core", subclass, frozen)]
 #[derive(Clone)]
 pub struct PySpecies(Species);
 
@@ -98,7 +98,7 @@ impl PySpecies {
     }
 }
 
-#[pyclass(name = "Point", module = "pyfts._core", extends=PySpecies, frozen)]
+#[pyclass(name = "Point", module = "pynoodle._core", extends=PySpecies, frozen)]
 pub struct PyPoint {}
 
 #[pymethods]
@@ -111,7 +111,7 @@ impl PyPoint {
     }
 }
 
-#[pyclass(name = "Polymer", module = "pyfts._core", extends=PySpecies, frozen)]
+#[pyclass(name = "Polymer", module = "pynoodle._core", extends=PySpecies, frozen)]
 pub struct PyPolymer {}
 
 #[pymethods]
