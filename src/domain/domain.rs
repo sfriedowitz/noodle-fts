@@ -1,11 +1,11 @@
-use itertools::{iproduct, Itertools};
+use itertools::{Itertools, iproduct};
 use ndarray::{Array2, Axis};
 
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
-    fields::RField,
-    utils::math::{fftfreq, rfftfreq, TWO_PI},
     Error, Result,
+    fields::RField,
+    utils::math::{TWO_PI, fftfreq, rfftfreq},
 };
 
 fn get_kvecs_1d(nx: usize) -> Array2<f64> {
@@ -68,17 +68,29 @@ impl Domain {
         &self.cell
     }
 
-    pub fn ksq(&self) -> RField {
-        // TODO: Do we care that this is allocating?
-        let kvecs = match self.mesh {
+    pub fn cell_mut(&mut self) -> &mut UnitCell {
+        &mut self.cell
+    }
+
+    /// Get the wave vectors in the reciprocal lattice.
+    ///
+    /// Returns an Array2<f64> where each row is a k-vector [kx, ky, kz].
+    /// The k-vectors are in fractional coordinates (2π/L units).
+    pub fn kvecs(&self) -> Array2<f64> {
+        match self.mesh {
             Mesh::One(nx) => get_kvecs_1d(nx),
             Mesh::Two(nx, ny) => get_kvecs_2d(nx, ny),
             Mesh::Three(nx, ny, nz) => get_kvecs_3d(nx, ny, nz),
-        };
+        }
+    }
+
+    pub fn ksq(&self) -> RField {
+        // TODO: Do we care that this is allocating?
+        let kvecs = self.kvecs();
         let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
         (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
-            .into_shape(self.mesh.kmesh())
+            .into_shape_with_order(self.mesh.kmesh())
             .expect("kvecs size should match ksq field")
     }
 }

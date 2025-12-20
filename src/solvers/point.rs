@@ -59,6 +59,31 @@ impl SolverOps for PointSolver {
         let prefactor = self.species.phi() / self.partition;
         concentration.mapv_inplace(|conc| prefactor * conc);
     }
+
+    fn stress(&mut self, domain: &crate::domain::Domain) -> Vec<f64> {
+        let volume = domain.cell().volume();
+
+        // Point particles contribute only translational entropy stress
+        // σ_trans = -(φ/V) δ_ij (diagonal, isotropic pressure)
+        let phi = self.species.phi();
+        let pressure = -phi / volume;
+
+        let ncomponents = domain.mesh().stress_components();
+        let mut stress = vec![pressure; ncomponents];
+
+        // Set off-diagonal components to zero
+        match domain.mesh() {
+            crate::domain::Mesh::One(_) => {}                  // No off-diagonal terms
+            crate::domain::Mesh::Two(_, _) => stress[2] = 0.0, // σ_xy = 0
+            crate::domain::Mesh::Three(_, _, _) => {
+                stress[3] = 0.0; // σ_xy = 0
+                stress[4] = 0.0; // σ_xz = 0
+                stress[5] = 0.0; // σ_yz = 0
+            }
+        }
+
+        stress
+    }
 }
 
 #[cfg(test)]

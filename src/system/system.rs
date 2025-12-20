@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-use rand::{distributions::Distribution, Rng};
+use rand::{Rng, distr::Distribution};
 
 use super::Interaction;
 use crate::{
+    Error, Result,
     chem::{Monomer, Species, SpeciesDescription},
     domain::{Domain, Mesh, UnitCell},
     fields::{FieldOps, RField, RFieldView},
     solvers::{SolverOps, SpeciesSolver},
-    Error, Result,
 };
 
 fn generate_fields(mesh: Mesh, ids: &[usize]) -> HashMap<usize, RField> {
@@ -87,6 +87,10 @@ impl System {
 
     pub fn domain(&self) -> &Domain {
         &self.domain
+    }
+
+    pub fn domain_mut(&mut self) -> &mut Domain {
+        &mut self.domain
     }
 
     pub fn interaction(&self) -> &Interaction {
@@ -300,6 +304,30 @@ impl System {
         f_trans + f_inter
     }
 
+    /// Compute the stress tensor using analytical formulation from Fredrickson.
+    ///
+    /// The stress tensor σ_ij = -(1/V) ∂F/∂h_ij where h is the shape tensor.
+    /// Each solver computes its own contribution to the stress.
+    ///
+    /// Returns a symmetric stress tensor as a flattened vector.
+    /// For 1D: [σ_xx]
+    /// For 2D: [σ_xx, σ_yy, σ_xy]
+    /// For 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+    pub fn stress(&mut self) -> Vec<f64> {
+        // Initialize stress tensor (size determined by first solver)
+        let mut stress = self.solvers[0].stress(&self.domain);
+
+        // Sum contributions from remaining species
+        for solver in self.solvers.iter_mut().skip(1) {
+            let solver_stress = solver.stress(&self.domain);
+            for (i, &s) in solver_stress.iter().enumerate() {
+                stress[i] += s;
+            }
+        }
+
+        stress
+    }
+
     /// Return the weighted error based on the current field residuals.
     ///
     /// Reference: https://link.springer.com/article/10.1140/epje/i2009-10534-3
@@ -363,5 +391,98 @@ mod tests {
         let f = system.free_energy();
         let f_bulk = system.free_energy_bulk();
         assert_approx_eq!(f64, f, f_bulk);
+    }
+
+    #[test]
+    fn test_stress_homogeneous() {
+        let mesh = Mesh::One(32);
+        let cell = UnitCell::lamellar(10.0).unwrap();
+
+        let monomer_a = Monomer::new(0, 1.0);
+        let monomer_b = Monomer::new(1, 1.0);
+
+        let block = Block::new(monomer_a, 100, 1.0);
+        let polymer = Polymer::new(vec![block], 100, 0.5);
+        let point = Point::new(monomer_b, 0.5);
+        let species: Vec<Species> = vec![polymer.into(), point.into()];
+
+        // When: System initialized with zero fields (homogeneous state)
+        let mut system = System::new(mesh, cell, species).unwrap();
+        system.interaction_mut().set_chi(0, 1, 0.25);
+        system.update();
+
+        // Then: Stress should be computable
+        let stress = system.stress();
+        assert_eq!(stress.len(), 1); // Lamellar has 1 stress component
+
+        // Stress magnitude should be small for homogeneous system
+        assert!(stress[0].abs() < 1.0, "Stress = {:?}", stress);
+    }
+
+    #[test]
+    fn test_stress_1d_polymer() {
+        let mesh = Mesh::One(32);
+        let cell = UnitCell::lamellar(10.0).unwrap();
+
+        let monomer_a = Monomer::new(0, 1.0);
+        let block = Block::new(monomer_a, 100, 1.0);
+        let polymer = Polymer::new(vec![block], 100, 1.0);
+        let species: Vec<Species> = vec![polymer.into()];
+
+        // When: System initialized and solved
+        let mut system = System::new(mesh, cell, species).unwrap();
+        system.update();
+
+        // Then: Should compute stress
+        let stress = system.stress();
+        assert_eq!(stress.len(), 1); // Lamellar 1D has 1 stress component
+    }
+
+    #[test]
+    fn test_stress_2d_symmetry() {
+        let mesh = Mesh::Two(16, 16);
+        let cell = UnitCell::square(10.0).unwrap();
+
+        let monomer_a = Monomer::new(0, 1.0);
+        let block = Block::new(monomer_a, 100, 1.0);
+        let polymer = Polymer::new(vec![block], 100, 1.0);
+        let species: Vec<Species> = vec![polymer.into()];
+
+        // When: 2D system
+        let mut system = System::new(mesh, cell, species).unwrap();
+        system.update();
+
+        // Then: Should return 3 components [σ_xx, σ_yy, σ_xy]
+        let stress = system.stress();
+        assert_eq!(stress.len(), 3);
+
+        // For square cell with isotropic polymer, σ_xx should equal σ_yy
+        assert_approx_eq!(f64, stress[0], stress[1], epsilon = 1e-6);
+
+        // σ_xy should be zero by symmetry
+        assert!(stress[2].abs() < 1e-10, "σ_xy = {}", stress[2]);
+    }
+
+    #[test]
+    fn test_stress_point_particle() {
+        let mesh = Mesh::One(32);
+        let cell = UnitCell::lamellar(10.0).unwrap();
+
+        let monomer = Monomer::new(0, 1.0);
+        let point = Point::new(monomer, 0.5);
+        let species: Vec<Species> = vec![point.into()];
+
+        // When: System with only point particles
+        let mut system = System::new(mesh, cell, species).unwrap();
+        system.update();
+
+        // Then: Should compute stress from translational entropy
+        let stress = system.stress();
+        assert_eq!(stress.len(), 1);
+
+        // Point particle stress is -φ/V (isotropic pressure)
+        let volume = system.domain().cell().volume();
+        let expected = -0.5 / volume;
+        assert_approx_eq!(f64, stress[0], expected, epsilon = 1e-10);
     }
 }

@@ -98,6 +98,24 @@ impl SolverOps for PolymerSolver {
             }
         }
     }
+
+    fn stress(&mut self, domain: &crate::domain::Domain) -> Vec<f64> {
+        let phi = self.species.phi();
+        let partition = self.partition;
+
+        // Initialize with first block's stress
+        let mut stress = self.block_solvers[0].compute_stress(domain, phi, partition);
+
+        // Accumulate stress from remaining blocks
+        for block_solver in self.block_solvers.iter_mut().skip(1) {
+            let block_stress = block_solver.compute_stress(domain, phi, partition);
+            for (i, &s) in block_stress.iter().enumerate() {
+                stress[i] += s;
+            }
+        }
+
+        stress
+    }
 }
 
 #[cfg(test)]

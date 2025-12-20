@@ -1,6 +1,6 @@
 [package]
 name = "noodle-fts"
-edition = "2021"
+edition = "2024"
 version = "0.1.0"
 authors = ["Sean Friedowitz <sfriedowitz93@gmail.com>"]
 readme = "README.md"
@@ -18,21 +18,21 @@ path = "src/lib.rs"
 python = ["pyo3", "numpy"]
 
 [dependencies]
-thiserror = "1.0.61"
-itertools = "0.13.0"
+thiserror = "2.0.17"
+itertools = "0.14.0"
 enum_dispatch = "0.3.13"
-float-cmp = "0.9.0"
-rand = "0.8.5"
-num = "0.4.2"
-ndrustfft = { version = "0.4.4", features = ["parallel"] }
-ndarray = { version = "0.15.6", features = ["rayon"] }
-ndarray-linalg = "0.16.0"
-ndarray-rand = "0.14.0"
-pyo3 = { version = "0.21.2", optional = true }
-numpy = { version = "0.21.0", optional = true }
+float-cmp = "0.10.0"
+num = "0.4.3"
+ndrustfft = { version = "0.6.0", features = ["parallel"] }
+ndarray = { version = "0.17.1", features = ["rayon"] }
+ndarray-linalg = "0.18.0"
+ndarray-rand = "0.16.0"
+pyo3 = { version = "0.27.2", optional = true }
+numpy = { version = "0.27.1", optional = true }
+rand = { version = "0.9", features = ["small_rng"] }
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = "0.8.1"
 
 [profile.release]
 lto = true

@@ -3,7 +3,11 @@ use std::collections::HashMap;
 use enum_dispatch::enum_dispatch;
 
 use super::{PointSolver, PolymerSolver};
-use crate::{chem::Species, domain::Mesh, fields::RField};
+use crate::{
+    chem::Species,
+    domain::{Domain, Mesh},
+    fields::RField,
+};
 
 #[enum_dispatch]
 pub trait SolverOps {
@@ -14,6 +18,14 @@ pub trait SolverOps {
     fn concentrations(&self) -> &HashMap<usize, RField>;
 
     fn solve(&mut self, fields: &HashMap<usize, RField>, ksq: &RField);
+
+    /// Compute the stress tensor contribution from this species.
+    ///
+    /// Returns stress components as a flattened vector:
+    /// - 1D: [σ_xx]
+    /// - 2D: [σ_xx, σ_yy, σ_xy]
+    /// - 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+    fn stress(&mut self, domain: &Domain) -> Vec<f64>;
 }
 
 #[enum_dispatch(SolverOps)]

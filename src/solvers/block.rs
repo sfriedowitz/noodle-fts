@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use super::{propagator::PropagatorDirection, Propagator, PropagatorStep, StepMethod};
 use crate::{
     chem::Block,
-    domain::Mesh,
+    domain::{Domain, Mesh, FFT},
     fields::{FieldOps, RField},
 };
 
 #[derive(Debug)]
 pub struct BlockSolver {
+    fft: FFT,
     mesh: Mesh,
     block: Block,
     step: PropagatorStep,
@@ -20,11 +21,13 @@ pub struct BlockSolver {
 
 impl BlockSolver {
     pub fn new(block: Block, mesh: Mesh, ns: usize, ds: f64) -> Self {
+        let fft = crate::domain::FFT::new(mesh);
         let step = PropagatorStep::new(mesh);
         let forward = Propagator::new(mesh, ns);
         let reverse = Propagator::new(mesh, ns);
         let concentration = RField::zeros(mesh);
         Self {
+            fft,
             mesh,
             block,
             step,
@@ -37,6 +40,14 @@ impl BlockSolver {
 
     pub fn ns(&self) -> usize {
         self.forward.ns()
+    }
+
+    pub fn ds(&self) -> f64 {
+        self.ds
+    }
+
+    pub fn block(&self) -> &Block {
+        &self.block
     }
 
     pub fn monomer_id(&self) -> usize {
@@ -63,12 +74,16 @@ impl BlockSolver {
     }
 
     pub fn solve(&mut self, source: Option<&RField>, direction: PropagatorDirection, method: StepMethod) {
-        let propagator = match direction {
-            PropagatorDirection::Forward => &mut self.forward,
-            PropagatorDirection::Reverse => &mut self.reverse,
-        };
-        propagator.update_head(source.into_iter());
-        propagator.propagate(&mut self.step, method);
+        match direction {
+            PropagatorDirection::Forward => {
+                self.forward.update_head(source.into_iter());
+                self.forward.propagate(&mut self.fft, &mut self.step, method);
+            }
+            PropagatorDirection::Reverse => {
+                self.reverse.update_head(source.into_iter());
+                self.reverse.propagate(&mut self.fft, &mut self.step, method);
+            }
+        }
     }
 
     pub fn update_step(&mut self, fields: &HashMap<usize, RField>, ksq: &RField) {
@@ -107,6 +122,95 @@ impl BlockSolver {
 
         // Normalize the integral
         self.concentration *= prefactor * (self.ds / 3.0);
+    }
+
+    /// Compute the stress contribution from this block.
+    ///
+    /// Uses Fredrickson's chain stretching formula:
+    /// σ_ij = -(b²V_monomer/6V) Σ_k (g^{-1}k)_i (g^{-1}k)_j W(k)
+    /// where W(k) = ∫ q_f(k,s) q_r(k,s) ds
+    pub fn compute_stress(&mut self, domain: &Domain, phi: f64, partition: f64) -> Vec<f64> {
+        use crate::fields::CField;
+
+        let volume = domain.cell().volume();
+        let kvecs = domain.kvecs();
+        let metric_inv = domain.cell().metric_inv();
+        let nk = kvecs.nrows();
+
+        // Initialize stress tensor
+        let ncomponents = domain.mesh().stress_components();
+        let mut stress = vec![0.0; ncomponents];
+
+        // Compute k-space transformed vectors
+        let kvecs_transformed = kvecs.dot(metric_inv);
+
+        // Prefactor: -(b²V_monomer φ) / (6V Q)
+        let b_sq = self.block.segment_length * self.block.segment_length;
+        let prefactor = -(phi * b_sq * self.block.monomer.size) / (6.0 * volume * partition);
+
+        // Reuse FFT for transforming propagators
+        let kmesh = self.mesh.kmesh();
+        let mut qf_k = CField::zeros(kmesh);
+        let mut qr_k = CField::zeros(kmesh);
+
+        // Compute W(k) = ∫ q_f(k,s) q_r(k,s) ds
+        let mut weights = vec![0.0; nk];
+        let ns = self.ns();
+
+        for s in 0..ns {
+            let qf_r = self.forward.position(s);
+            let qr_r = self.reverse.position(ns - s - 1);
+
+            // Transform to k-space
+            self.fft.forward(qf_r, &mut qf_k);
+            self.fft.forward(qr_r, &mut qr_k);
+
+            // Simpson's rule coefficient
+            let coef = if s == 0 || s == ns - 1 {
+                1.0
+            } else if s % 2 == 0 {
+                2.0
+            } else {
+                4.0
+            };
+
+            // Accumulate q_f * q_r†
+            for (ik, (&qf, &qr)) in qf_k.iter().zip(qr_k.iter()).enumerate() {
+                weights[ik] += coef * (qf * qr.conj()).re;
+            }
+        }
+
+        // Normalize integral
+        for w in weights.iter_mut() {
+            *w *= self.ds / 3.0;
+        }
+
+        // Compute stress tensor components
+        for ik in 0..nk {
+            let k = kvecs_transformed.row(ik);
+            let w = weights[ik];
+
+            match domain.mesh() {
+                crate::domain::Mesh::One(_) => {
+                    stress[0] += prefactor * w * k[0] * k[0];
+                }
+                crate::domain::Mesh::Two(_, _) => {
+                    stress[0] += prefactor * w * k[0] * k[0]; // σ_xx
+                    stress[1] += prefactor * w * k[1] * k[1]; // σ_yy
+                    stress[2] += prefactor * w * k[0] * k[1]; // σ_xy
+                }
+                crate::domain::Mesh::Three(_, _, _) => {
+                    stress[0] += prefactor * w * k[0] * k[0]; // σ_xx
+                    stress[1] += prefactor * w * k[1] * k[1]; // σ_yy
+                    stress[2] += prefactor * w * k[2] * k[2]; // σ_zz
+                    stress[3] += prefactor * w * k[0] * k[1]; // σ_xy
+                    stress[4] += prefactor * w * k[0] * k[2]; // σ_xz
+                    stress[5] += prefactor * w * k[1] * k[2]; // σ_yz
+                }
+            }
+        }
+
+        stress
     }
 }
 

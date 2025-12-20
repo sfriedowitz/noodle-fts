@@ -1,5 +1,5 @@
 use numpy::{IntoPyArray, PyArray2};
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple, PyClass};
+use pyo3::{PyClass, exceptions::PyValueError, prelude::*, types::PyTuple};
 
 use super::error::ToPyResult;
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
     impl_py_conversions,
 };
 
-#[pyclass(name = "Mesh", module = "pyfts._core", frozen)]
+#[pyclass(name = "Mesh", module = "pynoodle._core", frozen)]
 #[derive(Clone, Copy)]
 pub struct PyMesh(Mesh);
 
@@ -56,7 +56,7 @@ pub struct PyUnitCell(UnitCell);
 impl_py_conversions!(UnitCell, PyUnitCell);
 
 impl PyUnitCell {
-    pub fn into_subclass(self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn into_subclass(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let parameters = self.0.parameters();
         let base = PyClassInitializer::from(self);
         match parameters {
@@ -72,9 +72,10 @@ impl PyUnitCell {
         py: Python<'_>,
         base: PyClassInitializer<Self>,
         sub: S,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let init = base.add_subclass(sub);
-        Py::new(py, init).map(|obj| obj.to_object(py))
+        let obj = Py::new(py, init)?;
+        Ok(obj.into_any())
     }
 }
 
@@ -97,12 +98,12 @@ impl PyUnitCell {
 
     #[getter]
     fn get_shape<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.shape().clone().into_pyarray_bound(py)
+        self.0.shape().clone().into_pyarray(py)
     }
 
     #[getter]
     fn get_metric<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.metric().clone().into_pyarray_bound(py)
+        self.0.metric().clone().into_pyarray(py)
     }
 }
 
