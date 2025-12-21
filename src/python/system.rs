@@ -71,7 +71,7 @@ impl PySystem {
     fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (id, field) in self.0.fields().iter() {
-            dict.set_item(id, field.clone().to_pyarray(py))?;
+            dict.set_item(id, field.to_pyarray(py))?;
         }
         Ok(dict)
     }
@@ -79,7 +79,7 @@ impl PySystem {
     fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (id, conc) in self.0.concentrations().iter() {
-            dict.set_item(id, conc.clone().to_pyarray(py))?;
+            dict.set_item(id, conc.to_pyarray(py))?;
         }
         Ok(dict)
     }
@@ -109,10 +109,6 @@ impl PySystem {
         } else {
             Err(PyValueError::new_err(format!("invalid scale parameter: {scale}")))
         }
-    }
-
-    fn update(&mut self) {
-        self.0.update()
     }
 }
 

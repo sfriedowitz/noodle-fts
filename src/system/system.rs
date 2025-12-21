@@ -11,10 +11,6 @@ use crate::{
     solvers::{SolverOps, SpeciesSolver},
 };
 
-fn generate_fields(mesh: Mesh, ids: &[usize]) -> HashMap<usize, RField> {
-    ids.iter().cloned().map(|id| (id, RField::zeros(mesh))).collect()
-}
-
 #[derive(Debug)]
 pub struct System {
     // Components
@@ -49,10 +45,14 @@ impl System {
             .collect();
 
         let mesh = domain.mesh();
-        let fields = generate_fields(mesh, &monomer_ids);
-        let concentrations = generate_fields(mesh, &monomer_ids);
-        let residuals = generate_fields(mesh, &monomer_ids);
-        let potentials = generate_fields(mesh, &monomer_ids);
+        let fields: HashMap<usize, RField> = monomer_ids
+            .iter()
+            .cloned()
+            .map(|id| (id, RField::zeros(mesh)))
+            .collect();
+        let concentrations = fields.clone();
+        let residuals = fields.clone();
+        let potentials = fields.clone();
         let incompressibility = RField::zeros(mesh);
         let total_concentration = RField::zeros(mesh);
         let ndim = mesh.ndim();
