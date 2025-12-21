@@ -121,8 +121,8 @@ impl SolverOps for PolymerSolver {
 #[cfg(test)]
 mod tests {
     use float_cmp::assert_approx_eq;
-    use ndarray_rand::{rand_distr::Normal, RandomExt};
-    use rand::{rngs::SmallRng, SeedableRng};
+    use ndarray_rand::{RandomExt, rand_distr::Normal};
+    use rand::{SeedableRng, rngs::SmallRng};
 
     use super::*;
     use crate::{

@@ -1,10 +1,10 @@
 use float_cmp::approx_eq;
-use ndarray::{array, Array2};
+use ndarray::{Array2, array};
 use ndarray_linalg::{Determinant, Inverse};
 
 use crate::{
-    utils::math::{HALF_PI, THIRD_PI},
     Result,
+    utils::math::{HALF_PI, THIRD_PI},
 };
 
 fn shape_tensor_1d(a: f64) -> Array2<f64> {

@@ -1,5 +1,5 @@
 use crate::{
-    domain::{Mesh, FFT},
+    domain::{FFT, Mesh},
     fields::{CField, FieldOps, RField},
 };
 

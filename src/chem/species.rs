@@ -51,11 +51,7 @@ impl SpeciesDescription for Point {
     }
 
     fn monomer_fraction(&self, id: usize) -> f64 {
-        if id == self.monomer.id {
-            1.0
-        } else {
-            0.0
-        }
+        if id == self.monomer.id { 1.0 } else { 0.0 }
     }
 }
 

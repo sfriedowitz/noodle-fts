@@ -29,6 +29,7 @@ pub struct System {
     potentials: HashMap<usize, RField>,
     incompressibility: RField,
     total_concentration: RField,
+    stress: Vec<f64>,
 }
 
 impl System {
@@ -54,6 +55,7 @@ impl System {
         let potentials = generate_fields(mesh, &monomer_ids);
         let incompressibility = RField::zeros(mesh);
         let total_concentration = RField::zeros(mesh);
+        let stress = Vec::new();
 
         Ok(System {
             domain,
@@ -66,6 +68,7 @@ impl System {
             potentials,
             incompressibility,
             total_concentration,
+            stress,
         })
     }
 
@@ -107,6 +110,10 @@ impl System {
 
     pub fn concentrations(&self) -> &HashMap<usize, RField> {
         &self.concentrations
+    }
+
+    pub fn stress(&self) -> &[f64] {
+        &self.stress
     }
 
     pub fn total_concentration(&self) -> &RField {
@@ -189,11 +196,13 @@ impl System {
     /// - Solving the concentrations for all species.
     /// - Updating the Lagrange multiplier incompressibility field.
     /// - Updating the system residuals based on the current fields and concentrations.
+    /// - Updating the cached stress tensor.
     pub fn update(&mut self) {
         self.update_concentrations();
         self.update_potentials();
         self.update_incompressibility();
         self.update_residuals();
+        self.update_stress();
     }
 
     fn update_concentrations(&mut self) {
@@ -258,6 +267,19 @@ impl System {
         }
     }
 
+    fn update_stress(&mut self) {
+        // Initialize stress tensor (size determined by first solver)
+        self.stress = self.solvers[0].stress(&self.domain);
+
+        // Sum contributions from remaining species
+        for solver in self.solvers.iter_mut().skip(1) {
+            let solver_stress = solver.stress(&self.domain);
+            for (i, &s) in solver_stress.iter().enumerate() {
+                self.stress[i] += s;
+            }
+        }
+    }
+
     /// Return the Helmholtz free energy based on the current system state.
     pub fn free_energy(&self) -> f64 {
         // Translational
@@ -302,30 +324,6 @@ impl System {
         let f_inter = self.interaction.energy_bulk(&self.monomer_fractions());
 
         f_trans + f_inter
-    }
-
-    /// Compute the stress tensor using analytical formulation from Fredrickson.
-    ///
-    /// The stress tensor σ_ij = -(1/V) ∂F/∂h_ij where h is the shape tensor.
-    /// Each solver computes its own contribution to the stress.
-    ///
-    /// Returns a symmetric stress tensor as a flattened vector.
-    /// For 1D: [σ_xx]
-    /// For 2D: [σ_xx, σ_yy, σ_xy]
-    /// For 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
-    pub fn stress(&mut self) -> Vec<f64> {
-        // Initialize stress tensor (size determined by first solver)
-        let mut stress = self.solvers[0].stress(&self.domain);
-
-        // Sum contributions from remaining species
-        for solver in self.solvers.iter_mut().skip(1) {
-            let solver_stress = solver.stress(&self.domain);
-            for (i, &s) in solver_stress.iter().enumerate() {
-                stress[i] += s;
-            }
-        }
-
-        stress
     }
 
     /// Return the weighted error based on the current field residuals.

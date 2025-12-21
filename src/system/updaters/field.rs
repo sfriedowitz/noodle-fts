@@ -30,7 +30,7 @@ impl FieldUpdater {
     }
 }
 
-impl SystemUpdater for FieldUpdater {
+impl super::SystemUpdater for FieldUpdater {
     fn step(&mut self, system: &mut System) -> Result<()> {
         let step_size = self.step_size;
 
