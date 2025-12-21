@@ -158,8 +158,8 @@ impl CellUpdater {
     ///
     /// - Lengths must be > 0.1 (prevents collapse)
     /// - Angles must be in (0.1, π - 0.1) (prevents degenerate cells)
-    fn clamp_parameters(values: &mut [f64], variant: CellLattice) {
-        match variant {
+    fn clamp_parameters(values: &mut [f64], lattice: CellLattice) {
+        match lattice {
             // Length-only cells
             CellLattice::Lamellar | CellLattice::Square | CellLattice::Hexagonal2D | CellLattice::Cubic => {
                 for v in values.iter_mut() {
