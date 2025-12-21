@@ -115,9 +115,9 @@ impl SolverOps for PolymerSolver {
 
         // Accumulate stress from blocks
         self.stress.fill(0.0);
-        for block_solver in self.block_solvers.iter_mut() {
-            let block_stress = block_solver.compute_stress(domain, phi, partition);
-            self.stress += &block_stress;
+        for solver in self.block_solvers.iter_mut() {
+            solver.update_stress(domain, phi, partition);
+            self.stress += solver.stress();
         }
     }
 }

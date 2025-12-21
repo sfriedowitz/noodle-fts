@@ -6,7 +6,7 @@ use super::{Propagator, PropagatorStep, StepMethod, propagator::PropagatorDirect
 use crate::{
     chem::Block,
     domain::{Domain, FFT, Mesh},
-    fields::{FieldOps, RField},
+    fields::{CField, FieldOps, RField},
 };
 
 #[derive(Debug)]
@@ -18,6 +18,7 @@ pub struct BlockSolver {
     forward: Propagator,
     reverse: Propagator,
     concentration: RField,
+    stress: Array2<f64>,
     ds: f64,
 }
 
@@ -28,6 +29,7 @@ impl BlockSolver {
         let forward = Propagator::new(mesh, ns);
         let reverse = Propagator::new(mesh, ns);
         let concentration = RField::zeros(mesh);
+        let stress = Array2::zeros((mesh.ndim(), mesh.ndim()));
         Self {
             fft,
             mesh,
@@ -36,6 +38,7 @@ impl BlockSolver {
             forward,
             reverse,
             concentration,
+            stress,
             ds,
         }
     }
@@ -58,6 +61,10 @@ impl BlockSolver {
 
     pub fn concentration(&self) -> &RField {
         &self.concentration
+    }
+
+    pub fn stress(&self) -> &Array2<f64> {
+        &self.stress
     }
 
     pub fn forward(&self) -> &Propagator {
@@ -126,22 +133,15 @@ impl BlockSolver {
         self.concentration *= prefactor * (self.ds / 3.0);
     }
 
-    /// Compute the stress contribution from this block.
-    ///
-    /// Uses Fredrickson's chain stretching formula:
-    /// σ_ij = -(b²V_monomer/6V) Σ_k (g^{-1}k)_i (g^{-1}k)_j W(k)
-    /// where W(k) = ∫ q_f(k,s) q_r(k,s) ds
-    pub fn compute_stress(&mut self, domain: &Domain, phi: f64, partition: f64) -> Array2<f64> {
-        use crate::fields::CField;
-
+    pub fn update_stress(&mut self, domain: &Domain, phi: f64, partition: f64) {
+        // TODO: This may not be correct. Validate prefactors?
+        // TODO: Can any of this be done during propagator updates?
+        // TODO: Can we get rid of any extra allocations here?
         let volume = domain.cell().volume();
         let kvecs = domain.kvecs();
         let metric_inv = domain.cell().metric_inv();
         let nk = kvecs.nrows();
         let ndim = domain.mesh().ndim();
-
-        // Initialize stress tensor as 2D array
-        let mut stress = Array2::zeros((ndim, ndim));
 
         // Compute k-space transformed vectors
         let kvecs_transformed = kvecs.dot(&metric_inv);
@@ -187,19 +187,18 @@ impl BlockSolver {
             *w *= self.ds / 3.0;
         }
 
-        // Compute stress tensor components: σ_ij = Σ_k k_i k_j W(k)
+        // Update stress tensor components: σ_ij = Σ_k k_i k_j W(k)
+        self.stress.fill(0.0);
         for ik in 0..nk {
             let k = kvecs_transformed.row(ik);
             let w = weights[ik];
 
             for i in 0..ndim {
                 for j in 0..ndim {
-                    stress[[i, j]] += prefactor * w * k[i] * k[j];
+                    self.stress[[i, j]] += prefactor * w * k[i] * k[j];
                 }
             }
         }
-
-        stress
     }
 }
 
