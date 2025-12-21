@@ -1,8 +1,7 @@
 use ndarray::{Array2, Array3};
 
 use crate::{
-    Result,
-    domain::{CellParametersVariant, UnitCell},
+    domain::{CellLattice, UnitCell},
     system::System,
 };
 
@@ -37,7 +36,7 @@ impl CellJacobian {
     ///
     /// # Parameters
     /// - `cell`: The unit cell at which to compute the Jacobian
-    pub fn compute(&self, cell: &UnitCell) -> Result<Array3<f64>> {
+    pub fn compute(&self, cell: &UnitCell) -> crate::Result<Array3<f64>> {
         let ndim = cell.ndim();
         let nparams = cell.nparams();
         let h0 = cell.shape();
@@ -112,28 +111,20 @@ impl CellJacobian {
 /// - Fredrickson's "The Equilibrium Theory of Inhomogeneous Polymers"
 #[derive(Debug, Clone)]
 pub struct CellUpdater {
-    damping: f64,
+    step_size: f64,
     jacobian: CellJacobian,
 }
 
 impl CellUpdater {
-    /// Create a new cell updater with the specified damping coefficient.
-    ///
-    /// # Parameters
-    /// - `damping`: Damping coefficient (typical range: 0.2-2.0)
-    ///   - Larger values: faster convergence but risk of oscillations
-    ///   - Smaller values: slower but more stable
-    ///   - Default recommendation: 1.0
-    pub fn new(damping: f64) -> Self {
+    pub fn new(step_size: f64) -> Self {
         Self {
-            damping,
+            step_size,
             jacobian: CellJacobian::new(1e-6),
         }
     }
 
-    /// Get the current damping coefficient.
-    pub fn damping(&self) -> f64 {
-        self.damping
+    pub fn step_size(&self) -> f64 {
+        self.step_size
     }
 
     /// Update cell parameters using Jacobian-based stress projection.
@@ -143,11 +134,7 @@ impl CellUpdater {
     /// 2. Projects stress to parameter space: grad = Σ_{i,j} J[i,j,k] * σ[i,j]
     /// 3. Updates parameters: params_new = params_old - damping * grad
     /// 4. Enforces bounds on parameters
-    fn update_cell(
-        &self,
-        cell: &UnitCell,
-        stress: &Array2<f64>,
-    ) -> Result<UnitCell> {
+    fn update_cell(&self, cell: &UnitCell, stress: &Array2<f64>) -> crate::Result<UnitCell> {
         // 1. Compute Jacobian
         let jacobian = self.jacobian.compute(cell)?;
 
@@ -155,61 +142,56 @@ impl CellUpdater {
         let grad_params = self.jacobian.project_stress(&jacobian, stress);
 
         // 3. Update parameters
-        let mut new_values = cell.values().to_vec();
+        let mut new_values = cell.parameters().to_vec();
         for (i, &grad) in grad_params.iter().enumerate() {
-            new_values[i] -= self.damping * grad;
+            new_values[i] -= self.step_size * grad;
         }
 
         // 4. Enforce bounds
-        Self::clamp_parameters(&mut new_values, cell.variant());
+        Self::clamp_parameters(&mut new_values, cell.lattice());
 
         // 5. Construct new cell
-        UnitCell::new(cell.variant(), new_values)
+        UnitCell::new(cell.lattice(), new_values)
     }
 
     /// Clamp parameters to physically valid ranges.
     ///
     /// - Lengths must be > 0.1 (prevents collapse)
     /// - Angles must be in (0.1, π - 0.1) (prevents degenerate cells)
-    fn clamp_parameters(values: &mut [f64], variant: CellParametersVariant) {
+    fn clamp_parameters(values: &mut [f64], variant: CellLattice) {
         match variant {
             // Length-only cells
-            CellParametersVariant::Lamellar
-            | CellParametersVariant::Square
-            | CellParametersVariant::Hexagonal2D
-            | CellParametersVariant::Cubic => {
+            CellLattice::Lamellar | CellLattice::Square | CellLattice::Hexagonal2D | CellLattice::Cubic => {
                 for v in values.iter_mut() {
                     *v = v.max(0.1);
                 }
             }
             // Length-only cells (multiple lengths)
-            CellParametersVariant::Rectangular
-            | CellParametersVariant::Tetragonal
-            | CellParametersVariant::Orthorhombic => {
+            CellLattice::Rectangular | CellLattice::Tetragonal | CellLattice::Orthorhombic => {
                 for v in values.iter_mut() {
                     *v = v.max(0.1);
                 }
             }
             // Oblique: [a, b, gamma]
-            CellParametersVariant::Oblique => {
+            CellLattice::Oblique => {
                 values[0] = values[0].max(0.1);
                 values[1] = values[1].max(0.1);
                 values[2] = values[2].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Rhombohedral: [a, alpha]
-            CellParametersVariant::Rhombohedral => {
+            CellLattice::Rhombohedral => {
                 values[0] = values[0].max(0.1);
                 values[1] = values[1].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Monoclinic: [a, b, c, beta]
-            CellParametersVariant::Monoclinic => {
+            CellLattice::Monoclinic => {
                 values[0] = values[0].max(0.1);
                 values[1] = values[1].max(0.1);
                 values[2] = values[2].max(0.1);
                 values[3] = values[3].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Triclinic: [a, b, c, alpha, beta, gamma]
-            CellParametersVariant::Triclinic => {
+            CellLattice::Triclinic => {
                 values[0] = values[0].max(0.1);
                 values[1] = values[1].max(0.1);
                 values[2] = values[2].max(0.1);
@@ -218,7 +200,7 @@ impl CellUpdater {
                 values[5] = values[5].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Hexagonal3D: [a, c]
-            CellParametersVariant::Hexagonal3D => {
+            CellLattice::Hexagonal3D => {
                 values[0] = values[0].max(0.1);
                 values[1] = values[1].max(0.1);
             }
@@ -233,11 +215,7 @@ impl super::SystemUpdater for CellUpdater {
     /// 1. Updates cell parameters based on stress: p_new = p_old - damping * σ
     /// 2. Reconstructs the UnitCell with new parameters
     /// 3. Updates the system state with new cell
-    ///
-    /// # Returns
-    /// - `Ok(())` on success
-    /// - `Err(_)` if cell type is unsupported or parameters are invalid
-    fn step(&mut self, system: &mut System) -> Result<()> {
+    fn step(&mut self, system: &mut System) -> crate::Result<()> {
         let stress = system.stress();
         let cell = system.domain().cell();
 
@@ -257,11 +235,12 @@ impl super::SystemUpdater for CellUpdater {
 #[cfg(test)]
 mod tests {
     use float_cmp::assert_approx_eq;
+    use ndarray::array;
 
     use super::*;
     use crate::{
         chem::{Block, Monomer, Polymer},
-        domain::Mesh,
+        domain::{CellLattice, Mesh},
         system::SystemUpdater,
     };
 
@@ -329,8 +308,6 @@ mod tests {
 
     #[test]
     fn test_project_stress_lamellar() {
-        use ndarray::array;
-
         let jacobian = CellJacobian::new(1e-6);
         let cell = UnitCell::lamellar(10.0).unwrap();
 
@@ -346,8 +323,6 @@ mod tests {
 
     #[test]
     fn test_project_stress_rectangular() {
-        use ndarray::array;
-
         let jacobian = CellJacobian::new(1e-6);
         let cell = UnitCell::rectangular(10.0, 8.0).unwrap();
 
@@ -389,40 +364,34 @@ mod tests {
 
         // Check that cell parameter is still positive
         let cell = system.domain().cell();
-        let a = cell.values()[0];
+        let a = cell.parameters()[0];
         assert!(a > 0.0, "Cell parameter should remain positive");
     }
 
     #[test]
     fn test_update_cell_lamellar() {
-        use ndarray::array;
-        use crate::domain::CellParametersVariant;
-
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::lamellar(10.0).unwrap();
         let stress = array![[2.0]]; // Positive stress → decrease a
 
         let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        assert_eq!(new_cell.variant(), CellParametersVariant::Lamellar);
-        let a = new_cell.values()[0];
+        assert_eq!(new_cell.lattice(), CellLattice::Lamellar);
+        let a = new_cell.parameters()[0];
         assert!(a < 10.0, "Parameter should decrease with positive stress");
         assert!(a > 0.0, "Parameter should remain positive");
     }
 
     #[test]
     fn test_update_cell_square() {
-        use ndarray::array;
-        use crate::domain::CellParametersVariant;
-
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::square(10.0).unwrap();
         let stress = array![[1.0, 0.0], [0.0, 1.0]]; // Equal diagonal stress
 
         let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        assert_eq!(new_cell.variant(), CellParametersVariant::Square);
-        let a = new_cell.values()[0];
+        assert_eq!(new_cell.lattice(), CellLattice::Square);
+        let a = new_cell.parameters()[0];
         // Jacobian: both diagonal elements contribute to 'a' parameter
         // grad = σ[0,0] + σ[1,1] = 1.0 + 1.0 = 2.0
         // a_new = 10 - 1.0 * 2.0 = 8.0
@@ -431,17 +400,14 @@ mod tests {
 
     #[test]
     fn test_update_cell_rectangular() {
-        use ndarray::array;
-        use crate::domain::CellParametersVariant;
-
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::rectangular(10.0, 8.0).unwrap();
         let stress = array![[2.0, 0.0], [0.0, 1.0]]; // Different diagonal stresses
 
         let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        assert_eq!(new_cell.variant(), CellParametersVariant::Rectangular);
-        let values = new_cell.values();
+        assert_eq!(new_cell.lattice(), CellLattice::Rectangular);
+        let values = new_cell.parameters();
         // Relaxed epsilon to account for finite difference numerical error
         assert_approx_eq!(f64, values[0], 8.0, epsilon = 1e-5); // 10 - 2
         assert_approx_eq!(f64, values[1], 7.0, epsilon = 1e-5); // 8 - 1
@@ -449,17 +415,14 @@ mod tests {
 
     #[test]
     fn test_update_cell_cubic() {
-        use ndarray::array;
-        use crate::domain::CellParametersVariant;
-
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::cubic(10.0).unwrap();
         let stress = array![[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]];
 
         let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        assert_eq!(new_cell.variant(), CellParametersVariant::Cubic);
-        let a = new_cell.values()[0];
+        assert_eq!(new_cell.lattice(), CellLattice::Cubic);
+        let a = new_cell.parameters()[0];
         // Jacobian: all three diagonal elements contribute to 'a' parameter
         // grad = σ[0,0] + σ[1,1] + σ[2,2] = 1.0 + 2.0 + 3.0 = 6.0
         // a_new = 10 - 1.0 * 6.0 = 4.0
@@ -468,17 +431,14 @@ mod tests {
 
     #[test]
     fn test_update_cell_orthorhombic() {
-        use ndarray::array;
-        use crate::domain::CellParametersVariant;
-
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::orthorhombic(10.0, 8.0, 6.0).unwrap();
         let stress = array![[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]];
 
         let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        assert_eq!(new_cell.variant(), CellParametersVariant::Orthorhombic);
-        let values = new_cell.values();
+        assert_eq!(new_cell.lattice(), CellLattice::Orthorhombic);
+        let values = new_cell.parameters();
         // Relaxed epsilon to account for finite difference numerical error
         assert_approx_eq!(f64, values[0], 9.0, epsilon = 1e-5); // 10 - 1
         assert_approx_eq!(f64, values[1], 6.0, epsilon = 1e-5); // 8 - 2
@@ -487,9 +447,6 @@ mod tests {
 
     #[test]
     fn test_hexagonal_cell_supported() {
-        use ndarray::array;
-        use crate::domain::CellParametersVariant;
-
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::hexagonal_2d(10.0).unwrap();
         let stress = array![[1.0, 0.0], [0.0, 1.0]];
@@ -498,8 +455,8 @@ mod tests {
         assert!(result.is_ok(), "Hexagonal2D should now be supported");
 
         let new_cell = result.unwrap();
-        assert_eq!(new_cell.variant(), CellParametersVariant::Hexagonal2D);
-        let a = new_cell.values()[0];
+        assert_eq!(new_cell.lattice(), CellLattice::Hexagonal2D);
+        let a = new_cell.parameters()[0];
         // Should average diagonal stress
         assert!(a < 10.0);
     }

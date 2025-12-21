@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ndarray::Zip;
 
-use crate::{Error, Result, fields::RField, system::System};
+use crate::{fields::RField, system::System};
 
 /// Field updater implementing a Euler-Maruyama predictor-corrector method.
 ///
@@ -25,13 +25,17 @@ impl FieldUpdater {
         }
     }
 
-    fn get_buffer(&mut self, id: usize) -> Result<&mut RField> {
-        self.buffers.get_mut(&id).ok_or(Error::UnknownId(id))
+    pub fn step_size(&self) -> f64 {
+        self.step_size
+    }
+
+    fn get_buffer(&mut self, id: usize) -> crate::Result<&mut RField> {
+        self.buffers.get_mut(&id).ok_or(crate::Error::UnknownId(id))
     }
 }
 
 impl super::SystemUpdater for FieldUpdater {
-    fn step(&mut self, system: &mut System) -> Result<()> {
+    fn step(&mut self, system: &mut System) -> crate::Result<()> {
         let step_size = self.step_size;
 
         // 1) Predict with the "force" at time t

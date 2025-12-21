@@ -3,7 +3,7 @@ use pyo3::{PyClass, exceptions::PyValueError, prelude::*, types::PyTuple};
 
 use super::error::ToPyResult;
 use crate::{
-    domain::{CellParametersVariant, Mesh, UnitCell},
+    domain::{CellLattice, Mesh, UnitCell},
     impl_py_conversions,
 };
 
@@ -57,13 +57,13 @@ impl_py_conversions!(UnitCell, PyUnitCell);
 
 impl PyUnitCell {
     pub fn into_subclass(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let variant = self.0.variant();
+        let lattice = self.0.lattice();
         let base = PyClassInitializer::from(self);
-        match variant {
-            CellParametersVariant::Lamellar => Self::add_subclass(py, base, PyLamellarCell {}),
-            CellParametersVariant::Square => Self::add_subclass(py, base, PySquareCell {}),
-            CellParametersVariant::Hexagonal2D => Self::add_subclass(py, base, PyHexagonal2DCell {}),
-            CellParametersVariant::Cubic => Self::add_subclass(py, base, PyCubicCell {}),
+        match lattice {
+            CellLattice::Lamellar => Self::add_subclass(py, base, PyLamellarCell {}),
+            CellLattice::Square => Self::add_subclass(py, base, PySquareCell {}),
+            CellLattice::Hexagonal2D => Self::add_subclass(py, base, PyHexagonal2DCell {}),
+            CellLattice::Cubic => Self::add_subclass(py, base, PyCubicCell {}),
             _ => todo!(),
         }
     }
@@ -83,7 +83,7 @@ impl PyUnitCell {
 impl PyUnitCell {
     fn __repr__(&self) -> String {
         // TODO: No idea how to get the name of the subclass at runtime
-        format!("{:?}({:?})", self.0.variant(), self.0.values())
+        format!("{:?}({:?})", self.0.lattice(), self.0.parameters())
     }
 
     #[getter]
@@ -93,7 +93,7 @@ impl PyUnitCell {
 
     #[getter]
     fn get_parameters(&self) -> Vec<f64> {
-        self.0.values().to_vec()
+        self.0.parameters().to_vec()
     }
 
     #[getter]

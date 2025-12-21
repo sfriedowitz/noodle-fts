@@ -64,10 +64,6 @@ impl PySystem {
         self.0.field_error()
     }
 
-    fn stress<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
-        self.0.stress().to_pyarray(py)
-    }
-
     fn set_interaction(&mut self, i: usize, j: usize, chi: f64) {
         self.0.interaction_mut().set_chi(i, j, chi)
     }
@@ -86,6 +82,10 @@ impl PySystem {
             dict.set_item(id, conc.clone().to_pyarray(py))?;
         }
         Ok(dict)
+    }
+
+    fn stress<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+        self.0.stress().to_pyarray(py)
     }
 
     fn set_field(&mut self, id: usize, field: PyReadonlyArrayDyn<'_, f64>) -> PyResult<()> {
@@ -129,6 +129,11 @@ impl PyFieldUpdater {
         Self(updater)
     }
 
+    #[getter]
+    fn step_size(&self) -> f64 {
+        self.0.step_size()
+    }
+
     fn step(&mut self, system: &Bound<'_, PySystem>) -> PyResult<()> {
         let system = &mut system.borrow_mut().0;
         ToPyResult(self.0.step(system)).into_py()
@@ -143,14 +148,14 @@ impl_py_conversions!(CellUpdater, PyCellUpdater);
 #[pymethods]
 impl PyCellUpdater {
     #[new]
-    fn __new__(damping: f64) -> Self {
-        let updater = CellUpdater::new(damping);
+    fn __new__(step_size: f64) -> Self {
+        let updater = CellUpdater::new(step_size);
         Self(updater)
     }
 
     #[getter]
-    fn damping(&self) -> f64 {
-        self.0.damping()
+    fn step_size(&self) -> f64 {
+        self.0.step_size()
     }
 
     fn step(&mut self, system: &Bound<'_, PySystem>) -> PyResult<()> {

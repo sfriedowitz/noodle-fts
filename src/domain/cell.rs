@@ -2,10 +2,7 @@ use float_cmp::approx_eq;
 use ndarray::{Array2, array};
 use ndarray_linalg::{Determinant, Inverse};
 
-use crate::{
-    Result,
-    utils::math::{HALF_PI, THIRD_PI},
-};
+use crate::utils::math::{HALF_PI, THIRD_PI};
 
 fn shape_tensor_1d(a: f64) -> Array2<f64> {
     array![[a]]
@@ -52,7 +49,7 @@ fn shape_tensor_3d(a: f64, b: f64, c: f64, alpha: f64, beta: f64, gamma: f64) ->
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CellParametersVariant {
+pub enum CellLattice {
     Lamellar,
     Square,
     Rectangular,
@@ -67,7 +64,7 @@ pub enum CellParametersVariant {
     Triclinic,
 }
 
-impl CellParametersVariant {
+impl CellLattice {
     pub fn nparams(&self) -> usize {
         match self {
             Self::Lamellar => 1,
@@ -98,128 +95,132 @@ impl CellParametersVariant {
             Self::Cubic => shape_tensor_3d(values[0], values[0], values[0], HALF_PI, HALF_PI, HALF_PI),
             Self::Tetragonal => shape_tensor_3d(values[0], values[0], values[1], HALF_PI, HALF_PI, HALF_PI),
             Self::Orthorhombic => shape_tensor_3d(values[0], values[1], values[2], HALF_PI, HALF_PI, HALF_PI),
-            Self::Rhombohedral => shape_tensor_3d(values[0], values[0], values[0], values[1], values[1], values[1]),
+            Self::Rhombohedral => {
+                shape_tensor_3d(values[0], values[0], values[0], values[1], values[1], values[1])
+            }
             Self::Hexagonal3D => shape_tensor_3d(values[0], values[0], values[1], HALF_PI, HALF_PI, THIRD_PI),
             Self::Monoclinic => shape_tensor_3d(values[0], values[1], values[2], HALF_PI, values[3], HALF_PI),
-            Self::Triclinic => shape_tensor_3d(values[0], values[1], values[2], values[3], values[4], values[5]),
+            Self::Triclinic => {
+                shape_tensor_3d(values[0], values[1], values[2], values[3], values[4], values[5])
+            }
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct UnitCell {
-    variant: CellParametersVariant,
-    values: Vec<f64>,
+    lattice: CellLattice,
+    parameters: Vec<f64>,
 }
 
 impl UnitCell {
     // Constructors
-    pub fn new(variant: CellParametersVariant, values: Vec<f64>) -> Result<Self> {
-        if values.len() != variant.nparams() {
-            return Err(crate::Error::Generic(Box::from(format!(
+    pub fn new(lattice: CellLattice, values: Vec<f64>) -> crate::Result<Self> {
+        if values.len() != lattice.nparams() {
+            return Err(crate::Error::Generic(format!(
                 "Expected {} parameters for {:?}, got {}",
-                variant.nparams(),
-                variant,
+                lattice.nparams(),
+                lattice,
                 values.len()
-            ))));
+            )));
         }
-        Ok(Self { variant, values })
+        Ok(Self {
+            lattice,
+            parameters: values,
+        })
     }
 
-    pub fn lamellar(a: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Lamellar, vec![a])
+    pub fn lamellar(a: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Lamellar, vec![a])
     }
 
-    pub fn square(a: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Square, vec![a])
+    pub fn square(a: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Square, vec![a])
     }
 
-    pub fn rectangular(a: f64, b: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Rectangular, vec![a, b])
+    pub fn rectangular(a: f64, b: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Rectangular, vec![a, b])
     }
 
-    pub fn hexagonal_2d(a: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Hexagonal2D, vec![a])
+    pub fn hexagonal_2d(a: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Hexagonal2D, vec![a])
     }
 
-    pub fn oblique(a: f64, b: f64, gamma: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Oblique, vec![a, b, gamma])
+    pub fn oblique(a: f64, b: f64, gamma: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Oblique, vec![a, b, gamma])
     }
 
-    pub fn cubic(a: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Cubic, vec![a])
+    pub fn cubic(a: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Cubic, vec![a])
     }
 
-    pub fn tetragonal(a: f64, c: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Tetragonal, vec![a, c])
+    pub fn tetragonal(a: f64, c: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Tetragonal, vec![a, c])
     }
 
-    pub fn orthorhombic(a: f64, b: f64, c: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Orthorhombic, vec![a, b, c])
+    pub fn orthorhombic(a: f64, b: f64, c: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Orthorhombic, vec![a, b, c])
     }
 
-    pub fn rhombohedral(a: f64, alpha: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Rhombohedral, vec![a, alpha])
+    pub fn rhombohedral(a: f64, alpha: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Rhombohedral, vec![a, alpha])
     }
 
-    pub fn hexagonal_3d(a: f64, c: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Hexagonal3D, vec![a, c])
+    pub fn hexagonal_3d(a: f64, c: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Hexagonal3D, vec![a, c])
     }
 
-    pub fn monoclinic(a: f64, b: f64, c: f64, beta: f64) -> Result<Self> {
-        Self::new(CellParametersVariant::Monoclinic, vec![a, b, c, beta])
+    pub fn monoclinic(a: f64, b: f64, c: f64, beta: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Monoclinic, vec![a, b, c, beta])
     }
 
-    pub fn triclinic(a: f64, b: f64, c: f64, alpha: f64, beta: f64, gamma: f64) -> Result<Self> {
-        Self::new(
-            CellParametersVariant::Triclinic,
-            vec![a, b, c, alpha, beta, gamma],
-        )
+    pub fn triclinic(a: f64, b: f64, c: f64, alpha: f64, beta: f64, gamma: f64) -> crate::Result<Self> {
+        Self::new(CellLattice::Triclinic, vec![a, b, c, alpha, beta, gamma])
     }
 
     // Accessors
-    pub fn variant(&self) -> CellParametersVariant {
-        self.variant
+    pub fn lattice(&self) -> CellLattice {
+        self.lattice
     }
 
-    pub fn values(&self) -> &[f64] {
-        &self.values
+    pub fn parameters(&self) -> &[f64] {
+        &self.parameters
     }
 
     pub fn nparams(&self) -> usize {
-        self.variant.nparams()
+        self.parameters.len()
     }
 
     pub fn ndim(&self) -> usize {
-        match self.variant {
-            CellParametersVariant::Lamellar => 1,
-            CellParametersVariant::Square
-            | CellParametersVariant::Rectangular
-            | CellParametersVariant::Hexagonal2D
-            | CellParametersVariant::Oblique => 2,
+        match self.lattice {
+            CellLattice::Lamellar => 1,
+            CellLattice::Square
+            | CellLattice::Rectangular
+            | CellLattice::Hexagonal2D
+            | CellLattice::Oblique => 2,
             _ => 3,
         }
     }
 
-    pub fn perturb(&self, param_idx: usize, delta: f64) -> Result<Self> {
-        if param_idx >= self.values.len() {
-            return Err(crate::Error::Generic(Box::from(format!(
+    pub fn perturb(&self, idx: usize, delta: f64) -> crate::Result<Self> {
+        if idx >= self.parameters.len() {
+            return Err(crate::Error::Generic(format!(
                 "Parameter index {} out of bounds (max {})",
-                param_idx,
-                self.values.len() - 1
-            ))));
+                idx,
+                self.parameters.len() - 1
+            )));
         }
-        let mut new_values = self.values.clone();
-        new_values[param_idx] += delta;
+        let mut new_parameters = self.parameters.clone();
+        new_parameters[idx] += delta;
         Ok(Self {
-            variant: self.variant,
-            values: new_values,
+            lattice: self.lattice,
+            parameters: new_parameters,
         })
     }
 
     // Computed properties (on-the-fly)
     pub fn shape(&self) -> Array2<f64> {
-        self.variant.to_shape_tensor(&self.values)
+        self.lattice.to_shape_tensor(&self.parameters)
     }
 
     pub fn shape_inv(&self) -> Array2<f64> {
@@ -237,7 +238,7 @@ impl UnitCell {
 
     /// Get the cell volume (determinant of shape matrix).
     pub fn volume(&self) -> f64 {
-        self.shape().det().unwrap()
+        self.shape().det().expect("Shape tensor should be invertible")
     }
 }
 

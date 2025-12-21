@@ -5,7 +5,6 @@ use rand::{Rng, distr::Distribution};
 
 use super::Interaction;
 use crate::{
-    Error, Result,
     chem::{Monomer, Species, SpeciesDescription},
     domain::{Domain, Mesh, UnitCell},
     fields::{FieldOps, RField, RFieldView},
@@ -34,7 +33,7 @@ pub struct System {
 }
 
 impl System {
-    pub fn new(mesh: Mesh, cell: UnitCell, species: Vec<Species>) -> Result<Self> {
+    pub fn new(mesh: Mesh, cell: UnitCell, species: Vec<Species>) -> crate::Result<Self> {
         let monomers: HashMap<usize, Monomer> = species
             .iter()
             .flat_map(|s| s.monomers())
@@ -151,20 +150,29 @@ impl System {
         })
     }
 
-    pub fn assign_field(&mut self, id: usize, new: RFieldView<'_>) -> Result<()> {
-        let current = self.fields.get_mut(&id).ok_or(Error::UnknownId(id))?;
+    pub fn assign_field(&mut self, id: usize, new: RFieldView<'_>) -> crate::Result<()> {
+        let current = self.fields.get_mut(&id).ok_or(crate::Error::UnknownId(id))?;
         if new.shape() != current.shape() {
-            Err(Error::Shape(current.shape().to_owned(), new.shape().to_owned()))
+            Err(crate::Error::Shape(
+                current.shape().to_owned(),
+                new.shape().to_owned(),
+            ))
         } else {
             current.assign(&new);
             Ok(())
         }
     }
 
-    pub fn assign_concentration(&mut self, id: usize, new: RFieldView<'_>) -> Result<()> {
-        let current = self.concentrations.get_mut(&id).ok_or(Error::UnknownId(id))?;
+    pub fn assign_concentration(&mut self, id: usize, new: RFieldView<'_>) -> crate::Result<()> {
+        let current = self
+            .concentrations
+            .get_mut(&id)
+            .ok_or(crate::Error::UnknownId(id))?;
         if new.shape() != current.shape() {
-            Err(Error::Shape(current.shape().to_owned(), new.shape().to_owned()))
+            Err(crate::Error::Shape(
+                current.shape().to_owned(),
+                new.shape().to_owned(),
+            ))
         } else {
             current.assign(&new);
             Ok(())

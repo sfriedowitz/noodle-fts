@@ -11,5 +11,5 @@ pub enum Error {
     #[error("dimension mismatch: {0} != {1}")]
     Dimension(usize, usize),
     #[error("{0}")]
-    Generic(#[from] Box<dyn std::error::Error>),
+    Generic(String),
 }
