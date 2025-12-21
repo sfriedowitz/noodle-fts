@@ -1,4 +1,4 @@
-use pyo3::{exceptions::PyException, PyResult};
+use pyo3::{PyResult, exceptions::PyException};
 
 use crate::Result;
 

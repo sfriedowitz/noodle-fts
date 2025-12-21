@@ -24,5 +24,6 @@ pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // System
     m.add_class::<system::PySystem>()?;
     m.add_class::<system::PyFieldUpdater>()?;
+    m.add_class::<system::PyCellUpdater>()?;
     Ok(())
 }

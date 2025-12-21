@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
+use ndarray::Array2;
 use rand::{Rng, distr::Distribution};
 
 use super::Interaction;
 use crate::{
-    Error, Result,
     chem::{Monomer, Species, SpeciesDescription},
     domain::{Domain, Mesh, UnitCell},
     fields::{FieldOps, RField, RFieldView},
@@ -29,10 +29,11 @@ pub struct System {
     potentials: HashMap<usize, RField>,
     incompressibility: RField,
     total_concentration: RField,
+    stress: Array2<f64>,
 }
 
 impl System {
-    pub fn new(mesh: Mesh, cell: UnitCell, species: Vec<Species>) -> Result<Self> {
+    pub fn new(mesh: Mesh, cell: UnitCell, species: Vec<Species>) -> crate::Result<Self> {
         let monomers: HashMap<usize, Monomer> = species
             .iter()
             .flat_map(|s| s.monomers())
@@ -54,6 +55,8 @@ impl System {
         let potentials = generate_fields(mesh, &monomer_ids);
         let incompressibility = RField::zeros(mesh);
         let total_concentration = RField::zeros(mesh);
+        let ndim = mesh.ndim();
+        let stress = Array2::zeros((ndim, ndim));
 
         Ok(System {
             domain,
@@ -66,6 +69,7 @@ impl System {
             potentials,
             incompressibility,
             total_concentration,
+            stress,
         })
     }
 
@@ -109,6 +113,10 @@ impl System {
         &self.concentrations
     }
 
+    pub fn stress(&self) -> &Array2<f64> {
+        &self.stress
+    }
+
     pub fn total_concentration(&self) -> &RField {
         &self.total_concentration
     }
@@ -142,20 +150,29 @@ impl System {
         })
     }
 
-    pub fn assign_field(&mut self, id: usize, new: RFieldView<'_>) -> Result<()> {
-        let current = self.fields.get_mut(&id).ok_or(Error::UnknownId(id))?;
+    pub fn assign_field(&mut self, id: usize, new: RFieldView<'_>) -> crate::Result<()> {
+        let current = self.fields.get_mut(&id).ok_or(crate::Error::UnknownId(id))?;
         if new.shape() != current.shape() {
-            Err(Error::Shape(current.shape().to_owned(), new.shape().to_owned()))
+            Err(crate::Error::Shape(
+                current.shape().to_owned(),
+                new.shape().to_owned(),
+            ))
         } else {
             current.assign(&new);
             Ok(())
         }
     }
 
-    pub fn assign_concentration(&mut self, id: usize, new: RFieldView<'_>) -> Result<()> {
-        let current = self.concentrations.get_mut(&id).ok_or(Error::UnknownId(id))?;
+    pub fn assign_concentration(&mut self, id: usize, new: RFieldView<'_>) -> crate::Result<()> {
+        let current = self
+            .concentrations
+            .get_mut(&id)
+            .ok_or(crate::Error::UnknownId(id))?;
         if new.shape() != current.shape() {
-            Err(Error::Shape(current.shape().to_owned(), new.shape().to_owned()))
+            Err(crate::Error::Shape(
+                current.shape().to_owned(),
+                new.shape().to_owned(),
+            ))
         } else {
             current.assign(&new);
             Ok(())
@@ -189,11 +206,13 @@ impl System {
     /// - Solving the concentrations for all species.
     /// - Updating the Lagrange multiplier incompressibility field.
     /// - Updating the system residuals based on the current fields and concentrations.
+    /// - Updating the cached stress tensor.
     pub fn update(&mut self) {
         self.update_concentrations();
         self.update_potentials();
         self.update_incompressibility();
         self.update_residuals();
+        self.update_stress();
     }
 
     fn update_concentrations(&mut self) {
@@ -203,9 +222,8 @@ impl System {
             conc.fill(0.0);
         }
         // Solve the species given current fields/domain
-        let ksq = self.domain.ksq();
         for solver in self.solvers.iter_mut() {
-            solver.solve(&self.fields, &ksq);
+            solver.solve_concentration(&self.fields, &self.domain);
             for (id, conc) in solver.concentrations().iter() {
                 self.total_concentration += conc;
                 *self.concentrations.get_mut(id).unwrap() += conc;
@@ -258,6 +276,17 @@ impl System {
         }
     }
 
+    fn update_stress(&mut self) {
+        // Initialize stress tensor
+        self.stress.fill(0.0);
+
+        // Sum contributions from all species
+        for solver in self.solvers.iter_mut() {
+            solver.solve_stress(&self.domain);
+            self.stress += solver.stress();
+        }
+    }
+
     /// Return the Helmholtz free energy based on the current system state.
     pub fn free_energy(&self) -> f64 {
         // Translational
@@ -302,30 +331,6 @@ impl System {
         let f_inter = self.interaction.energy_bulk(&self.monomer_fractions());
 
         f_trans + f_inter
-    }
-
-    /// Compute the stress tensor using analytical formulation from Fredrickson.
-    ///
-    /// The stress tensor σ_ij = -(1/V) ∂F/∂h_ij where h is the shape tensor.
-    /// Each solver computes its own contribution to the stress.
-    ///
-    /// Returns a symmetric stress tensor as a flattened vector.
-    /// For 1D: [σ_xx]
-    /// For 2D: [σ_xx, σ_yy, σ_xy]
-    /// For 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
-    pub fn stress(&mut self) -> Vec<f64> {
-        // Initialize stress tensor (size determined by first solver)
-        let mut stress = self.solvers[0].stress(&self.domain);
-
-        // Sum contributions from remaining species
-        for solver in self.solvers.iter_mut().skip(1) {
-            let solver_stress = solver.stress(&self.domain);
-            for (i, &s) in solver_stress.iter().enumerate() {
-                stress[i] += s;
-            }
-        }
-
-        stress
     }
 
     /// Return the weighted error based on the current field residuals.
@@ -413,10 +418,10 @@ mod tests {
 
         // Then: Stress should be computable
         let stress = system.stress();
-        assert_eq!(stress.len(), 1); // Lamellar has 1 stress component
+        assert_eq!(stress.shape(), &[1, 1]); // Lamellar has 1x1 stress tensor
 
         // Stress magnitude should be small for homogeneous system
-        assert!(stress[0].abs() < 1.0, "Stress = {:?}", stress);
+        assert!(stress[[0, 0]].abs() < 1.0, "Stress = {:?}", stress);
     }
 
     #[test]
@@ -435,7 +440,7 @@ mod tests {
 
         // Then: Should compute stress
         let stress = system.stress();
-        assert_eq!(stress.len(), 1); // Lamellar 1D has 1 stress component
+        assert_eq!(stress.shape(), &[1, 1]); // Lamellar 1D has 1x1 stress tensor
     }
 
     #[test]
@@ -452,15 +457,15 @@ mod tests {
         let mut system = System::new(mesh, cell, species).unwrap();
         system.update();
 
-        // Then: Should return 3 components [σ_xx, σ_yy, σ_xy]
+        // Then: Should return 2x2 stress tensor
         let stress = system.stress();
-        assert_eq!(stress.len(), 3);
+        assert_eq!(stress.shape(), &[2, 2]);
 
         // For square cell with isotropic polymer, σ_xx should equal σ_yy
-        assert_approx_eq!(f64, stress[0], stress[1], epsilon = 1e-6);
+        assert_approx_eq!(f64, stress[[0, 0]], stress[[1, 1]], epsilon = 1e-6);
 
         // σ_xy should be zero by symmetry
-        assert!(stress[2].abs() < 1e-10, "σ_xy = {}", stress[2]);
+        assert!(stress[[0, 1]].abs() < 1e-10, "σ_xy = {}", stress[[0, 1]]);
     }
 
     #[test]
@@ -478,11 +483,11 @@ mod tests {
 
         // Then: Should compute stress from translational entropy
         let stress = system.stress();
-        assert_eq!(stress.len(), 1);
+        assert_eq!(stress.shape(), &[1, 1]);
 
         // Point particle stress is -φ/V (isotropic pressure)
         let volume = system.domain().cell().volume();
         let expected = -0.5 / volume;
-        assert_approx_eq!(f64, stress[0], expected, epsilon = 1e-10);
+        assert_approx_eq!(f64, stress[[0, 0]], expected, epsilon = 1e-10);
     }
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use enum_dispatch::enum_dispatch;
+use ndarray::Array2;
 
 use super::{PointSolver, PolymerSolver};
 use crate::{
@@ -17,15 +18,11 @@ pub trait SolverOps {
 
     fn concentrations(&self) -> &HashMap<usize, RField>;
 
-    fn solve(&mut self, fields: &HashMap<usize, RField>, ksq: &RField);
+    fn stress(&self) -> &Array2<f64>;
 
-    /// Compute the stress tensor contribution from this species.
-    ///
-    /// Returns stress components as a flattened vector:
-    /// - 1D: [σ_xx]
-    /// - 2D: [σ_xx, σ_yy, σ_xy]
-    /// - 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
-    fn stress(&mut self, domain: &Domain) -> Vec<f64>;
+    fn solve_concentration(&mut self, fields: &HashMap<usize, RField>, domain: &Domain);
+
+    fn solve_stress(&mut self, domain: &Domain);
 }
 
 #[enum_dispatch(SolverOps)]

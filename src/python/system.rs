@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     impl_py_conversions,
-    system::{FieldUpdater, System},
+    system::{CellUpdater, FieldUpdater, System, SystemUpdater},
 };
 
 #[pyclass(name = "System", module = "pynoodle._core")]
@@ -64,28 +64,28 @@ impl PySystem {
         self.0.field_error()
     }
 
-    fn stress(&mut self) -> Vec<f64> {
-        self.0.stress()
-    }
-
     fn set_interaction(&mut self, i: usize, j: usize, chi: f64) {
         self.0.interaction_mut().set_chi(i, j, chi)
     }
 
-    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Py<PyDict>> {
+    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (id, field) in self.0.fields().iter() {
             dict.set_item(id, field.clone().to_pyarray(py))?;
         }
-        Ok(dict.into())
+        Ok(dict)
     }
 
-    fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Py<PyDict>> {
+    fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (id, conc) in self.0.concentrations().iter() {
             dict.set_item(id, conc.clone().to_pyarray(py))?;
         }
-        Ok(dict.into())
+        Ok(dict)
+    }
+
+    fn stress<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+        self.0.stress().to_pyarray(py)
     }
 
     fn set_field(&mut self, id: usize, field: PyReadonlyArrayDyn<'_, f64>) -> PyResult<()> {
@@ -110,6 +110,10 @@ impl PySystem {
             Err(PyValueError::new_err(format!("invalid scale parameter: {scale}")))
         }
     }
+
+    fn update(&mut self) {
+        self.0.update()
+    }
 }
 
 #[pyclass(name = "FieldUpdater", module = "pynoodle._core")]
@@ -123,6 +127,35 @@ impl PyFieldUpdater {
     fn __new__(system: PyRef<'_, PySystem>, step_size: f64) -> Self {
         let updater = FieldUpdater::new(&system.0, step_size);
         Self(updater)
+    }
+
+    #[getter]
+    fn step_size(&self) -> f64 {
+        self.0.step_size()
+    }
+
+    fn step(&mut self, system: &Bound<'_, PySystem>) -> PyResult<()> {
+        let system = &mut system.borrow_mut().0;
+        ToPyResult(self.0.step(system)).into_py()
+    }
+}
+
+#[pyclass(name = "CellUpdater", module = "pynoodle._core")]
+pub struct PyCellUpdater(CellUpdater);
+
+impl_py_conversions!(CellUpdater, PyCellUpdater);
+
+#[pymethods]
+impl PyCellUpdater {
+    #[new]
+    fn __new__(step_size: f64) -> Self {
+        let updater = CellUpdater::new(step_size);
+        Self(updater)
+    }
+
+    #[getter]
+    fn step_size(&self) -> f64 {
+        self.0.step_size()
     }
 
     fn step(&mut self, system: &Bound<'_, PySystem>) -> PyResult<()> {

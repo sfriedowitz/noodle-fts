@@ -1,7 +1,7 @@
 mod interaction;
 mod system;
-mod updater;
+mod updaters;
 
 pub use interaction::*;
 pub use system::*;
-pub use updater::*;
+pub use updaters::*;

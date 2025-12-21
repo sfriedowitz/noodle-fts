@@ -3,7 +3,6 @@ use ndarray::{Array2, Axis};
 
 use super::{cell::UnitCell, mesh::Mesh};
 use crate::{
-    Error, Result,
     fields::RField,
     utils::math::{TWO_PI, fftfreq, rfftfreq},
 };
@@ -49,9 +48,9 @@ pub struct Domain {
 }
 
 impl Domain {
-    pub fn new(mesh: Mesh, cell: UnitCell) -> Result<Self> {
+    pub fn new(mesh: Mesh, cell: UnitCell) -> crate::Result<Self> {
         if mesh.ndim() != cell.ndim() {
-            return Err(Error::Dimension(mesh.ndim(), cell.ndim()));
+            return Err(crate::Error::Dimension(mesh.ndim(), cell.ndim()));
         }
         Ok(Self { mesh, cell })
     }
@@ -87,7 +86,7 @@ impl Domain {
     pub fn ksq(&self) -> RField {
         // TODO: Do we care that this is allocating?
         let kvecs = self.kvecs();
-        let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
+        let kvecs_scaled = kvecs.dot(&self.cell.metric_inv());
         (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
             .into_shape_with_order(self.mesh.kmesh())

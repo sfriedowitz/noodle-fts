@@ -1,5 +1,6 @@
 from pynoodle._core import (
     Block,
+    CellUpdater,
     CubicCell,
     FieldUpdater,
     Hexagonal2DCell,
@@ -28,4 +29,5 @@ __all__ = [
     "CubicCell",
     "System",
     "FieldUpdater",
+    "CellUpdater",
 ]
