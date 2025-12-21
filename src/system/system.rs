@@ -212,9 +212,8 @@ impl System {
             conc.fill(0.0);
         }
         // Solve the species given current fields/domain
-        let ksq = self.domain.ksq();
         for solver in self.solvers.iter_mut() {
-            solver.solve(&self.fields, &ksq);
+            solver.solve_concentration(&self.fields, &self.domain);
             for (id, conc) in solver.concentrations().iter() {
                 self.total_concentration += conc;
                 *self.concentrations.get_mut(id).unwrap() += conc;
@@ -269,12 +268,12 @@ impl System {
 
     fn update_stress(&mut self) {
         // Initialize stress tensor (size determined by first solver)
-        self.stress = self.solvers[0].stress(&self.domain);
+        self.stress.fill(0.0);
 
         // Sum contributions from remaining species
-        for solver in self.solvers.iter_mut().skip(1) {
-            let solver_stress = solver.stress(&self.domain);
-            for (i, &s) in solver_stress.iter().enumerate() {
+        for solver in self.solvers.iter_mut() {
+            solver.solve_stress(&self.domain);
+            for (i, &s) in solver.stress().iter().enumerate() {
                 self.stress[i] += s;
             }
         }

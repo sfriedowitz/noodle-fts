@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::{BlockSolver, PropagatorDirection, SolverOps, StepMethod};
 use crate::{
     chem::{Polymer, Species, SpeciesDescription},
-    domain::Mesh,
+    domain::{Domain, Mesh},
     fields::RField,
 };
 
@@ -12,6 +12,7 @@ pub struct PolymerSolver {
     species: Polymer,
     block_solvers: Vec<BlockSolver>,
     concentrations: HashMap<usize, RField>,
+    stress: Vec<f64>,
     partition: f64,
 }
 
@@ -20,10 +21,12 @@ impl PolymerSolver {
         let block_solvers = Self::build_block_solvers(mesh, &species);
         let concentrations =
             HashMap::from_iter(species.monomers().iter().map(|m| (m.id, RField::zeros(mesh))));
+        let stress = vec![0.0; mesh.stress_components()];
         Self {
             species,
             block_solvers,
             concentrations,
+            stress,
             partition: 1.0,
         }
     }
@@ -59,10 +62,14 @@ impl SolverOps for PolymerSolver {
         &self.concentrations
     }
 
-    fn solve(&mut self, fields: &HashMap<usize, RField>, ksq: &RField) {
+    fn stress(&self) -> &[f64] {
+        &self.stress
+    }
+
+    fn solve_concentration(&mut self, fields: &HashMap<usize, RField>, domain: &Domain) {
         // Update solver steps with current fields
         for solver in self.block_solvers.iter_mut() {
-            solver.update_step(&fields, &ksq);
+            solver.update_step(&fields, &domain.ksq());
         }
 
         // Propagate forward (initialize first solver w/ empty source)
@@ -99,22 +106,18 @@ impl SolverOps for PolymerSolver {
         }
     }
 
-    fn stress(&mut self, domain: &crate::domain::Domain) -> Vec<f64> {
+    fn solve_stress(&mut self, domain: &crate::domain::Domain) {
         let phi = self.species.phi();
         let partition = self.partition;
 
-        // Initialize with first block's stress
-        let mut stress = self.block_solvers[0].compute_stress(domain, phi, partition);
-
         // Accumulate stress from remaining blocks
-        for block_solver in self.block_solvers.iter_mut().skip(1) {
+        self.stress.fill(0.0);
+        for block_solver in self.block_solvers.iter_mut() {
             let block_stress = block_solver.compute_stress(domain, phi, partition);
             for (i, &s) in block_stress.iter().enumerate() {
-                stress[i] += s;
+                self.stress[i] += s;
             }
         }
-
-        stress
     }
 }
 
@@ -147,10 +150,9 @@ mod tests {
         let fields = (0..nmonomer)
             .map(|id| (id, RField::random_using(mesh, &distr, &mut rng)))
             .collect();
-        let ksq = domain.ksq();
 
         let mut solver = PolymerSolver::new(mesh, polymer);
-        solver.solve(&fields, &ksq);
+        solver.solve_concentration(&fields, &domain);
 
         // Partition should be identical for any block along the chain contour
         let partitions: Vec<f64> = solver

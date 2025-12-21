@@ -3,25 +3,26 @@ use std::collections::HashMap;
 use super::SolverOps;
 use crate::{
     chem::{Point, Species, SpeciesDescription},
-    domain::Mesh,
+    domain::{Domain, Mesh},
     fields::RField,
 };
 
 #[derive(Debug)]
 pub struct PointSolver {
-    mesh: Mesh,
     species: Point,
     concentrations: HashMap<usize, RField>,
+    stress: Vec<f64>,
     partition: f64,
 }
 
 impl PointSolver {
     pub fn new(mesh: Mesh, species: Point) -> Self {
         let concentrations = HashMap::from([(species.monomer.id, RField::zeros(mesh))]);
+        let stress = vec![0.0; mesh.stress_components()];
         Self {
-            mesh,
             species,
             concentrations,
+            stress,
             partition: 1.0,
         }
     }
@@ -40,7 +41,11 @@ impl SolverOps for PointSolver {
         &self.concentrations
     }
 
-    fn solve(&mut self, fields: &HashMap<usize, RField>, _ksq: &RField) {
+    fn stress(&self) -> &[f64] {
+        &self.stress
+    }
+
+    fn solve_concentration(&mut self, fields: &HashMap<usize, RField>, domain: &Domain) {
         let monomer = self.species.monomer;
         let field = &fields.get(&monomer.id).unwrap();
         let concentration = self.concentrations.get_mut(&monomer.id).unwrap();
@@ -53,14 +58,14 @@ impl SolverOps for PointSolver {
         });
 
         // Normalize partition sum
-        self.partition = partition_sum / self.mesh.size() as f64;
+        self.partition = partition_sum / domain.mesh().size() as f64;
 
         // Normalize concentration inplace
         let prefactor = self.species.phi() / self.partition;
         concentration.mapv_inplace(|conc| prefactor * conc);
     }
 
-    fn stress(&mut self, domain: &crate::domain::Domain) -> Vec<f64> {
+    fn solve_stress(&mut self, domain: &Domain) {
         let volume = domain.cell().volume();
 
         // Point particles contribute only translational entropy stress
@@ -68,21 +73,22 @@ impl SolverOps for PointSolver {
         let phi = self.species.phi();
         let pressure = -phi / volume;
 
-        let ncomponents = domain.mesh().stress_components();
-        let mut stress = vec![pressure; ncomponents];
-
-        // Set off-diagonal components to zero
+        // Set diagonal componnets to pressure
+        self.stress.fill(0.0);
         match domain.mesh() {
-            crate::domain::Mesh::One(_) => {}                  // No off-diagonal terms
-            crate::domain::Mesh::Two(_, _) => stress[2] = 0.0, // σ_xy = 0
+            crate::domain::Mesh::One(_) => {
+                self.stress[0] = pressure;
+            }
+            crate::domain::Mesh::Two(_, _) => {
+                self.stress[0] = pressure;
+                self.stress[1] = pressure;
+            }
             crate::domain::Mesh::Three(_, _, _) => {
-                stress[3] = 0.0; // σ_xy = 0
-                stress[4] = 0.0; // σ_xz = 0
-                stress[5] = 0.0; // σ_yz = 0
+                self.stress[0] = pressure;
+                self.stress[1] = pressure;
+                self.stress[2] = pressure;
             }
         }
-
-        stress
     }
 }
 
@@ -104,10 +110,9 @@ mod tests {
         let phi = 0.235;
         let point = Point::new(Monomer::new(0, 1.0), phi);
         let fields = [(0, RField::zeros(mesh))].into();
-        let ksq = domain.ksq();
 
         let mut solver = PointSolver::new(mesh, point);
-        solver.solve(&fields, &ksq);
+        solver.solve_concentration(&fields, &domain);
 
         // Concentration should be the bulk fraction in the absence of a field
         let conc = solver.concentrations().get(&point.monomer.id).unwrap();
