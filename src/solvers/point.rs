@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ndarray::Array2;
+
 use super::SolverOps;
 use crate::{
     chem::{Point, Species, SpeciesDescription},
@@ -11,14 +13,15 @@ use crate::{
 pub struct PointSolver {
     species: Point,
     concentrations: HashMap<usize, RField>,
-    stress: Vec<f64>,
+    stress: Array2<f64>,
     partition: f64,
 }
 
 impl PointSolver {
     pub fn new(mesh: Mesh, species: Point) -> Self {
         let concentrations = HashMap::from([(species.monomer.id, RField::zeros(mesh))]);
-        let stress = vec![0.0; mesh.stress_components()];
+        let ndim = mesh.ndim();
+        let stress = Array2::zeros((ndim, ndim));
         Self {
             species,
             concentrations,
@@ -41,7 +44,7 @@ impl SolverOps for PointSolver {
         &self.concentrations
     }
 
-    fn stress(&self) -> &[f64] {
+    fn stress(&self) -> &Array2<f64> {
         &self.stress
     }
 
@@ -73,21 +76,11 @@ impl SolverOps for PointSolver {
         let phi = self.species.phi();
         let pressure = -phi / volume;
 
-        // Set diagonal componnets to pressure
+        // Fill stress matrix (diagonal only for isotropic pressure)
         self.stress.fill(0.0);
-        match domain.mesh() {
-            crate::domain::Mesh::One(_) => {
-                self.stress[0] = pressure;
-            }
-            crate::domain::Mesh::Two(_, _) => {
-                self.stress[0] = pressure;
-                self.stress[1] = pressure;
-            }
-            crate::domain::Mesh::Three(_, _, _) => {
-                self.stress[0] = pressure;
-                self.stress[1] = pressure;
-                self.stress[2] = pressure;
-            }
+        let ndim = domain.mesh().ndim();
+        for i in 0..ndim {
+            self.stress[[i, i]] = pressure;
         }
     }
 }

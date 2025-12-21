@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ndarray::Array2;
+
 use super::{Propagator, PropagatorStep, StepMethod, propagator::PropagatorDirection};
 use crate::{
     chem::Block,
@@ -129,20 +131,20 @@ impl BlockSolver {
     /// Uses Fredrickson's chain stretching formula:
     /// σ_ij = -(b²V_monomer/6V) Σ_k (g^{-1}k)_i (g^{-1}k)_j W(k)
     /// where W(k) = ∫ q_f(k,s) q_r(k,s) ds
-    pub fn compute_stress(&mut self, domain: &Domain, phi: f64, partition: f64) -> Vec<f64> {
+    pub fn compute_stress(&mut self, domain: &Domain, phi: f64, partition: f64) -> Array2<f64> {
         use crate::fields::CField;
 
         let volume = domain.cell().volume();
         let kvecs = domain.kvecs();
         let metric_inv = domain.cell().metric_inv();
         let nk = kvecs.nrows();
+        let ndim = domain.mesh().ndim();
 
-        // Initialize stress tensor
-        let ncomponents = domain.mesh().stress_components();
-        let mut stress = vec![0.0; ncomponents];
+        // Initialize stress tensor as 2D array
+        let mut stress = Array2::zeros((ndim, ndim));
 
         // Compute k-space transformed vectors
-        let kvecs_transformed = kvecs.dot(metric_inv);
+        let kvecs_transformed = kvecs.dot(&metric_inv);
 
         // Prefactor: -(b²V_monomer φ) / (6V Q)
         let b_sq = self.block.segment_length * self.block.segment_length;
@@ -185,27 +187,14 @@ impl BlockSolver {
             *w *= self.ds / 3.0;
         }
 
-        // Compute stress tensor components
+        // Compute stress tensor components: σ_ij = Σ_k k_i k_j W(k)
         for ik in 0..nk {
             let k = kvecs_transformed.row(ik);
             let w = weights[ik];
 
-            match domain.mesh() {
-                crate::domain::Mesh::One(_) => {
-                    stress[0] += prefactor * w * k[0] * k[0];
-                }
-                crate::domain::Mesh::Two(_, _) => {
-                    stress[0] += prefactor * w * k[0] * k[0]; // σ_xx
-                    stress[1] += prefactor * w * k[1] * k[1]; // σ_yy
-                    stress[2] += prefactor * w * k[0] * k[1]; // σ_xy
-                }
-                crate::domain::Mesh::Three(_, _, _) => {
-                    stress[0] += prefactor * w * k[0] * k[0]; // σ_xx
-                    stress[1] += prefactor * w * k[1] * k[1]; // σ_yy
-                    stress[2] += prefactor * w * k[2] * k[2]; // σ_zz
-                    stress[3] += prefactor * w * k[0] * k[1]; // σ_xy
-                    stress[4] += prefactor * w * k[0] * k[2]; // σ_xz
-                    stress[5] += prefactor * w * k[1] * k[2]; // σ_yz
+            for i in 0..ndim {
+                for j in 0..ndim {
+                    stress[[i, j]] += prefactor * w * k[i] * k[j];
                 }
             }
         }

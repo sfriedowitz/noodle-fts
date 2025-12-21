@@ -64,8 +64,8 @@ impl PySystem {
         self.0.field_error()
     }
 
-    fn stress(&mut self) -> &[f64] {
-        self.0.stress()
+    fn stress<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+        self.0.stress().to_pyarray(py)
     }
 
     fn set_interaction(&mut self, i: usize, j: usize, chi: f64) {
@@ -109,6 +109,10 @@ impl PySystem {
         } else {
             Err(PyValueError::new_err(format!("invalid scale parameter: {scale}")))
         }
+    }
+
+    fn update(&mut self) {
+        self.0.update()
     }
 }
 

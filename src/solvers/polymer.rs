@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ndarray::Array2;
+
 use super::{BlockSolver, PropagatorDirection, SolverOps, StepMethod};
 use crate::{
     chem::{Polymer, Species, SpeciesDescription},
@@ -12,7 +14,7 @@ pub struct PolymerSolver {
     species: Polymer,
     block_solvers: Vec<BlockSolver>,
     concentrations: HashMap<usize, RField>,
-    stress: Vec<f64>,
+    stress: Array2<f64>,
     partition: f64,
 }
 
@@ -21,7 +23,8 @@ impl PolymerSolver {
         let block_solvers = Self::build_block_solvers(mesh, &species);
         let concentrations =
             HashMap::from_iter(species.monomers().iter().map(|m| (m.id, RField::zeros(mesh))));
-        let stress = vec![0.0; mesh.stress_components()];
+        let ndim = mesh.ndim();
+        let stress = Array2::zeros((ndim, ndim));
         Self {
             species,
             block_solvers,
@@ -62,7 +65,7 @@ impl SolverOps for PolymerSolver {
         &self.concentrations
     }
 
-    fn stress(&self) -> &[f64] {
+    fn stress(&self) -> &Array2<f64> {
         &self.stress
     }
 
@@ -110,13 +113,11 @@ impl SolverOps for PolymerSolver {
         let phi = self.species.phi();
         let partition = self.partition;
 
-        // Accumulate stress from remaining blocks
+        // Accumulate stress from blocks
         self.stress.fill(0.0);
         for block_solver in self.block_solvers.iter_mut() {
             let block_stress = block_solver.compute_stress(domain, phi, partition);
-            for (i, &s) in block_stress.iter().enumerate() {
-                self.stress[i] += s;
-            }
+            self.stress += &block_stress;
         }
     }
 }

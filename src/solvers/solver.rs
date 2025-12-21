@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use enum_dispatch::enum_dispatch;
+use ndarray::Array2;
 
 use super::{PointSolver, PolymerSolver};
 use crate::{
@@ -17,7 +18,7 @@ pub trait SolverOps {
 
     fn concentrations(&self) -> &HashMap<usize, RField>;
 
-    fn stress(&self) -> &[f64];
+    fn stress(&self) -> &Array2<f64>;
 
     fn solve_concentration(&mut self, fields: &HashMap<usize, RField>, domain: &Domain);
 

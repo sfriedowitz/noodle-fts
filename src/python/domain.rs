@@ -3,7 +3,7 @@ use pyo3::{PyClass, exceptions::PyValueError, prelude::*, types::PyTuple};
 
 use super::error::ToPyResult;
 use crate::{
-    domain::{CellParameters, Mesh, UnitCell},
+    domain::{CellParametersVariant, Mesh, UnitCell},
     impl_py_conversions,
 };
 
@@ -57,13 +57,13 @@ impl_py_conversions!(UnitCell, PyUnitCell);
 
 impl PyUnitCell {
     pub fn into_subclass(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let parameters = self.0.parameters();
+        let variant = self.0.variant();
         let base = PyClassInitializer::from(self);
-        match parameters {
-            CellParameters::Lamellar { .. } => Self::add_subclass(py, base, PyLamellarCell {}),
-            CellParameters::Square { .. } => Self::add_subclass(py, base, PySquareCell {}),
-            CellParameters::Hexagonal2D { .. } => Self::add_subclass(py, base, PyHexagonal2DCell {}),
-            CellParameters::Cubic { .. } => Self::add_subclass(py, base, PyCubicCell {}),
+        match variant {
+            CellParametersVariant::Lamellar => Self::add_subclass(py, base, PyLamellarCell {}),
+            CellParametersVariant::Square => Self::add_subclass(py, base, PySquareCell {}),
+            CellParametersVariant::Hexagonal2D => Self::add_subclass(py, base, PyHexagonal2DCell {}),
+            CellParametersVariant::Cubic => Self::add_subclass(py, base, PyCubicCell {}),
             _ => todo!(),
         }
     }
@@ -83,7 +83,7 @@ impl PyUnitCell {
 impl PyUnitCell {
     fn __repr__(&self) -> String {
         // TODO: No idea how to get the name of the subclass at runtime
-        format!("{:?}", self.0.parameters())
+        format!("{:?}({:?})", self.0.variant(), self.0.values())
     }
 
     #[getter]
@@ -93,17 +93,17 @@ impl PyUnitCell {
 
     #[getter]
     fn get_parameters(&self) -> Vec<f64> {
-        self.0.parameters().into()
+        self.0.values().to_vec()
     }
 
     #[getter]
     fn get_shape<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.shape().clone().to_pyarray(py)
+        self.0.shape().to_pyarray(py)
     }
 
     #[getter]
     fn get_metric<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.0.metric().clone().to_pyarray(py)
+        self.0.metric().to_pyarray(py)
     }
 }
 

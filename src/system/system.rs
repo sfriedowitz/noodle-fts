@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use ndarray::Array2;
 use rand::{Rng, distr::Distribution};
 
 use super::Interaction;
@@ -29,7 +30,7 @@ pub struct System {
     potentials: HashMap<usize, RField>,
     incompressibility: RField,
     total_concentration: RField,
-    stress: Vec<f64>,
+    stress: Array2<f64>,
 }
 
 impl System {
@@ -55,7 +56,8 @@ impl System {
         let potentials = generate_fields(mesh, &monomer_ids);
         let incompressibility = RField::zeros(mesh);
         let total_concentration = RField::zeros(mesh);
-        let stress = Vec::new();
+        let ndim = mesh.ndim();
+        let stress = Array2::zeros((ndim, ndim));
 
         Ok(System {
             domain,
@@ -112,7 +114,7 @@ impl System {
         &self.concentrations
     }
 
-    pub fn stress(&self) -> &[f64] {
+    pub fn stress(&self) -> &Array2<f64> {
         &self.stress
     }
 
@@ -267,15 +269,13 @@ impl System {
     }
 
     fn update_stress(&mut self) {
-        // Initialize stress tensor (size determined by first solver)
+        // Initialize stress tensor
         self.stress.fill(0.0);
 
-        // Sum contributions from remaining species
+        // Sum contributions from all species
         for solver in self.solvers.iter_mut() {
             solver.solve_stress(&self.domain);
-            for (i, &s) in solver.stress().iter().enumerate() {
-                self.stress[i] += s;
-            }
+            self.stress += solver.stress();
         }
     }
 
@@ -410,10 +410,10 @@ mod tests {
 
         // Then: Stress should be computable
         let stress = system.stress();
-        assert_eq!(stress.len(), 1); // Lamellar has 1 stress component
+        assert_eq!(stress.shape(), &[1, 1]); // Lamellar has 1x1 stress tensor
 
         // Stress magnitude should be small for homogeneous system
-        assert!(stress[0].abs() < 1.0, "Stress = {:?}", stress);
+        assert!(stress[[0, 0]].abs() < 1.0, "Stress = {:?}", stress);
     }
 
     #[test]
@@ -432,7 +432,7 @@ mod tests {
 
         // Then: Should compute stress
         let stress = system.stress();
-        assert_eq!(stress.len(), 1); // Lamellar 1D has 1 stress component
+        assert_eq!(stress.shape(), &[1, 1]); // Lamellar 1D has 1x1 stress tensor
     }
 
     #[test]
@@ -449,15 +449,15 @@ mod tests {
         let mut system = System::new(mesh, cell, species).unwrap();
         system.update();
 
-        // Then: Should return 3 components [σ_xx, σ_yy, σ_xy]
+        // Then: Should return 2x2 stress tensor
         let stress = system.stress();
-        assert_eq!(stress.len(), 3);
+        assert_eq!(stress.shape(), &[2, 2]);
 
         // For square cell with isotropic polymer, σ_xx should equal σ_yy
-        assert_approx_eq!(f64, stress[0], stress[1], epsilon = 1e-6);
+        assert_approx_eq!(f64, stress[[0, 0]], stress[[1, 1]], epsilon = 1e-6);
 
         // σ_xy should be zero by symmetry
-        assert!(stress[2].abs() < 1e-10, "σ_xy = {}", stress[2]);
+        assert!(stress[[0, 1]].abs() < 1e-10, "σ_xy = {}", stress[[0, 1]]);
     }
 
     #[test]
@@ -475,11 +475,11 @@ mod tests {
 
         // Then: Should compute stress from translational entropy
         let stress = system.stress();
-        assert_eq!(stress.len(), 1);
+        assert_eq!(stress.shape(), &[1, 1]);
 
         // Point particle stress is -φ/V (isotropic pressure)
         let volume = system.domain().cell().volume();
         let expected = -0.5 / volume;
-        assert_approx_eq!(f64, stress[0], expected, epsilon = 1e-10);
+        assert_approx_eq!(f64, stress[[0, 0]], expected, epsilon = 1e-10);
     }
 }

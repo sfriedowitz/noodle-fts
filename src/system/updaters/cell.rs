@@ -1,10 +1,95 @@
-use ndarray::Array2;
+use ndarray::{Array2, Array3};
 
 use crate::{
-    Error, Result,
-    domain::{CellParameters, UnitCell},
+    Result,
+    domain::{CellParametersVariant, UnitCell},
     system::System,
 };
+
+/// Computes Jacobian for cell parameter updates using finite differences.
+///
+/// The Jacobian relates changes in the shape tensor to changes in cell parameters:
+/// J[i,j,k] = ∂h[i,j]/∂param[k]
+///
+/// This is computed using forward finite differences:
+/// J[i,j,k] ≈ (h(params + δe_k) - h(params)) / δ
+///
+/// The Jacobian is then used to project stress gradients to parameter space via:
+/// grad_params[k] = Σ_{i,j} J[i,j,k] * stress[i,j]
+#[derive(Debug, Clone)]
+pub struct CellJacobian {
+    epsilon: f64,
+}
+
+impl CellJacobian {
+    /// Create a new Jacobian computer with the specified finite difference step.
+    ///
+    /// # Parameters
+    /// - `epsilon`: Finite difference step size (typical: 1e-6)
+    pub fn new(epsilon: f64) -> Self {
+        Self { epsilon }
+    }
+
+    /// Compute the Jacobian ∂h/∂params using finite differences.
+    ///
+    /// Returns Array3<f64> of shape (ndim, ndim, nparams) where:
+    /// - result[[i, j, k]] = ∂h[i,j]/∂param[k]
+    ///
+    /// # Parameters
+    /// - `cell`: The unit cell at which to compute the Jacobian
+    pub fn compute(&self, cell: &UnitCell) -> Result<Array3<f64>> {
+        let ndim = cell.ndim();
+        let nparams = cell.nparams();
+        let h0 = cell.shape();
+
+        let mut jacobian = Array3::zeros((ndim, ndim, nparams));
+
+        for k in 0..nparams {
+            // Perturb parameter k
+            let cell_perturbed = cell.perturb(k, self.epsilon)?;
+            let h_perturbed = cell_perturbed.shape();
+
+            // Compute finite difference: (h_perturbed - h0) / epsilon
+            for i in 0..ndim {
+                for j in 0..ndim {
+                    jacobian[[i, j, k]] = (h_perturbed[[i, j]] - h0[[i, j]]) / self.epsilon;
+                }
+            }
+        }
+
+        Ok(jacobian)
+    }
+
+    /// Project stress tensor to parameter gradient via tensor contraction.
+    ///
+    /// Computes: grad_params[k] = Σ_{i,j} J[i,j,k] * stress[i,j]
+    ///
+    /// # Parameters
+    /// - `jacobian`: The Jacobian from compute()
+    /// - `stress`: The stress tensor (ndim × ndim)
+    ///
+    /// # Returns
+    /// Vec<f64> of length nparams containing the gradient in parameter space
+    pub fn project_stress(&self, jacobian: &Array3<f64>, stress: &Array2<f64>) -> Vec<f64> {
+        let shape = jacobian.shape();
+        let ndim = shape[0];
+        let nparams = shape[2];
+
+        let mut grad_params = vec![0.0; nparams];
+
+        for k in 0..nparams {
+            let mut sum = 0.0;
+            for i in 0..ndim {
+                for j in 0..ndim {
+                    sum += jacobian[[i, j, k]] * stress[[i, j]];
+                }
+            }
+            grad_params[k] = sum;
+        }
+
+        grad_params
+    }
+}
 
 /// Cell parameter updater using stress-based gradient descent.
 ///
@@ -12,12 +97,15 @@ use crate::{
 /// to optimize unit cell parameters based on the stress tensor. The equilibrium condition
 /// is a stress-free crystal (stress tensor = 0).
 ///
-/// The update rule is: `params_new = params_old - damping * stress`
+/// The update rule uses finite difference Jacobian projection:
+/// 1. Compute J = ∂h/∂params using finite differences
+/// 2. Project stress: grad = J^T · σ
+/// 3. Update: params_new = params_old - damping * grad
 ///
 /// # Algorithm
 /// - First-order damped dynamics
-/// - No predictor-corrector (parameters are scalars, not fields)
-/// - Intelligent stress-to-parameter mapping based on cell type
+/// - Jacobian-based projection from stress to parameter gradients
+/// - Automatic handling of constraints for all cell types
 ///
 /// # References
 /// - Parrinello-Rahman cell relaxation dynamics
@@ -25,6 +113,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct CellUpdater {
     damping: f64,
+    jacobian: CellJacobian,
 }
 
 impl CellUpdater {
@@ -36,7 +125,10 @@ impl CellUpdater {
     ///   - Smaller values: slower but more stable
     ///   - Default recommendation: 1.0
     pub fn new(damping: f64) -> Self {
-        Self { damping }
+        Self {
+            damping,
+            jacobian: CellJacobian::new(1e-6),
+        }
     }
 
     /// Get the current damping coefficient.
@@ -44,130 +136,92 @@ impl CellUpdater {
         self.damping
     }
 
-    /// Update shape tensor using stress and extract new parameters.
+    /// Update cell parameters using Jacobian-based stress projection.
     ///
-    /// The stress tensor σ and shape tensor h have the same dimensions.
-    /// We update the shape tensor directly: h_new = h_old - damping * σ
-    /// Then extract parameters from the updated shape tensor.
-    fn update_parameters(
+    /// This method:
+    /// 1. Computes the Jacobian J = ∂h/∂params using finite differences
+    /// 2. Projects stress to parameter space: grad = Σ_{i,j} J[i,j,k] * σ[i,j]
+    /// 3. Updates parameters: params_new = params_old - damping * grad
+    /// 4. Enforces bounds on parameters
+    fn update_cell(
         &self,
-        params: CellParameters,
-        stress: &[f64],
-        shape: &Array2<f64>,
-    ) -> Result<CellParameters> {
-        let ndim = shape.shape()[0];
+        cell: &UnitCell,
+        stress: &Array2<f64>,
+    ) -> Result<UnitCell> {
+        // 1. Compute Jacobian
+        let jacobian = self.jacobian.compute(cell)?;
 
-        // Convert flattened stress vector to symmetric matrix
-        let stress_matrix = self.stress_to_matrix(stress, ndim);
+        // 2. Project stress to parameter gradient
+        let grad_params = self.jacobian.project_stress(&jacobian, stress);
 
-        // Update shape tensor: h_new = h - damping * σ
-        let mut shape_new = shape.clone();
-        for i in 0..ndim {
-            for j in 0..ndim {
-                shape_new[[i, j]] -= self.damping * stress_matrix[[i, j]];
-            }
+        // 3. Update parameters
+        let mut new_values = cell.values().to_vec();
+        for (i, &grad) in grad_params.iter().enumerate() {
+            new_values[i] -= self.damping * grad;
         }
 
-        // Extract parameters from updated shape tensor based on cell type
-        self.extract_parameters(params, &shape_new)
+        // 4. Enforce bounds
+        Self::clamp_parameters(&mut new_values, cell.variant());
+
+        // 5. Construct new cell
+        UnitCell::new(cell.variant(), new_values)
     }
 
-    /// Convert flattened stress vector to symmetric matrix.
+    /// Clamp parameters to physically valid ranges.
     ///
-    /// Stress is stored as [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz] (only unique components).
-    /// We reconstruct the full symmetric matrix.
-    fn stress_to_matrix(&self, stress: &[f64], ndim: usize) -> Array2<f64> {
-        let mut matrix = Array2::zeros((ndim, ndim));
-
-        match ndim {
-            1 => {
-                matrix[[0, 0]] = stress[0];
+    /// - Lengths must be > 0.1 (prevents collapse)
+    /// - Angles must be in (0.1, π - 0.1) (prevents degenerate cells)
+    fn clamp_parameters(values: &mut [f64], variant: CellParametersVariant) {
+        match variant {
+            // Length-only cells
+            CellParametersVariant::Lamellar
+            | CellParametersVariant::Square
+            | CellParametersVariant::Hexagonal2D
+            | CellParametersVariant::Cubic => {
+                for v in values.iter_mut() {
+                    *v = v.max(0.1);
+                }
             }
-            2 => {
-                matrix[[0, 0]] = stress[0]; // σ_xx
-                matrix[[1, 1]] = stress[1]; // σ_yy
-                matrix[[0, 1]] = stress[2]; // σ_xy
-                matrix[[1, 0]] = stress[2]; // σ_xy (symmetric)
+            // Length-only cells (multiple lengths)
+            CellParametersVariant::Rectangular
+            | CellParametersVariant::Tetragonal
+            | CellParametersVariant::Orthorhombic => {
+                for v in values.iter_mut() {
+                    *v = v.max(0.1);
+                }
             }
-            3 => {
-                matrix[[0, 0]] = stress[0]; // σ_xx
-                matrix[[1, 1]] = stress[1]; // σ_yy
-                matrix[[2, 2]] = stress[2]; // σ_zz
-                matrix[[0, 1]] = stress[3]; // σ_xy
-                matrix[[1, 0]] = stress[3]; // σ_xy
-                matrix[[0, 2]] = stress[4]; // σ_xz
-                matrix[[2, 0]] = stress[4]; // σ_xz
-                matrix[[1, 2]] = stress[5]; // σ_yz
-                matrix[[2, 1]] = stress[5]; // σ_yz
+            // Oblique: [a, b, gamma]
+            CellParametersVariant::Oblique => {
+                values[0] = values[0].max(0.1);
+                values[1] = values[1].max(0.1);
+                values[2] = values[2].clamp(0.1, std::f64::consts::PI - 0.1);
             }
-            _ => {}
-        }
-
-        matrix
-    }
-
-    /// Extract cell parameters from updated shape tensor.
-    ///
-    /// Different cell types extract different parameters from the shape tensor.
-    /// Constrained cell types (Square, Cubic) average to maintain constraints.
-    fn extract_parameters(&self, params: CellParameters, shape: &Array2<f64>) -> Result<CellParameters> {
-        match params {
-            // 1D cells
-            CellParameters::Lamellar { .. } => Ok(CellParameters::Lamellar {
-                a: shape[[0, 0]].max(0.1),
-            }),
-
-            // 2D cells
-            CellParameters::Square { .. } => {
-                // Average diagonal to maintain a = b
-                let avg = (shape[[0, 0]] + shape[[1, 1]]) / 2.0;
-                Ok(CellParameters::Square { a: avg.max(0.1) })
+            // Rhombohedral: [a, alpha]
+            CellParametersVariant::Rhombohedral => {
+                values[0] = values[0].max(0.1);
+                values[1] = values[1].clamp(0.1, std::f64::consts::PI - 0.1);
             }
-            CellParameters::Rectangular { .. } => Ok(CellParameters::Rectangular {
-                a: shape[[0, 0]].max(0.1),
-                b: shape[[1, 1]].max(0.1),
-            }),
-            CellParameters::Hexagonal2D { .. } => {
-                // Average diagonal to maintain constraint
-                let avg = (shape[[0, 0]] + shape[[1, 1]]) / 2.0;
-                Ok(CellParameters::Hexagonal2D { a: avg.max(0.1) })
+            // Monoclinic: [a, b, c, beta]
+            CellParametersVariant::Monoclinic => {
+                values[0] = values[0].max(0.1);
+                values[1] = values[1].max(0.1);
+                values[2] = values[2].max(0.1);
+                values[3] = values[3].clamp(0.1, std::f64::consts::PI - 0.1);
             }
-            CellParameters::Oblique { .. } => {
-                let a = shape[[0, 0]];
-                let b_x = shape[[0, 1]];
-                let b_y = shape[[1, 1]];
-                let b = (b_x * b_x + b_y * b_y).sqrt();
-                let gamma = (b_x / b).acos();
-                Ok(CellParameters::Oblique {
-                    a: a.max(0.1),
-                    b: b.max(0.1),
-                    gamma: gamma.clamp(0.1, std::f64::consts::PI - 0.1),
-                })
+            // Triclinic: [a, b, c, alpha, beta, gamma]
+            CellParametersVariant::Triclinic => {
+                values[0] = values[0].max(0.1);
+                values[1] = values[1].max(0.1);
+                values[2] = values[2].max(0.1);
+                values[3] = values[3].clamp(0.1, std::f64::consts::PI - 0.1);
+                values[4] = values[4].clamp(0.1, std::f64::consts::PI - 0.1);
+                values[5] = values[5].clamp(0.1, std::f64::consts::PI - 0.1);
             }
-
-            // 3D cells
-            CellParameters::Cubic { .. } => {
-                // Average diagonal to maintain a = b = c
-                let avg = (shape[[0, 0]] + shape[[1, 1]] + shape[[2, 2]]) / 3.0;
-                Ok(CellParameters::Cubic { a: avg.max(0.1) })
+            // Hexagonal3D: [a, c]
+            CellParametersVariant::Hexagonal3D => {
+                values[0] = values[0].max(0.1);
+                values[1] = values[1].max(0.1);
             }
-            CellParameters::Tetragonal { .. } => {
-                let avg_ab = (shape[[0, 0]] + shape[[1, 1]]) / 2.0;
-                Ok(CellParameters::Tetragonal {
-                    a: avg_ab.max(0.1),
-                    c: shape[[2, 2]].max(0.1),
-                })
-            }
-            CellParameters::Orthorhombic { .. } => Ok(CellParameters::Orthorhombic {
-                a: shape[[0, 0]].max(0.1),
-                b: shape[[1, 1]].max(0.1),
-                c: shape[[2, 2]].max(0.1),
-            }),
-
-            // Complex 3D cells not yet supported
-            _ => Err(Error::Generic(Box::from(
-                "Cell type not yet supported for variable cell optimization",
-            ))),
         }
     }
 }
@@ -185,17 +239,10 @@ impl super::SystemUpdater for CellUpdater {
     /// - `Err(_)` if cell type is unsupported or parameters are invalid
     fn step(&mut self, system: &mut System) -> Result<()> {
         let stress = system.stress();
-
-        // Get current cell parameters and shape tensor
         let cell = system.domain().cell();
-        let params = cell.parameters();
-        let shape = cell.shape();
 
-        // Update parameters based on stress and shape tensor
-        let new_params = self.update_parameters(params, stress, shape)?;
-
-        // Reconstruct cell with new parameters
-        let new_cell = UnitCell::new(new_params)?;
+        // Update cell based on stress
+        let new_cell = self.update_cell(cell, stress)?;
 
         // Assign new cell to system
         *system.domain_mut().cell_mut() = new_cell;
@@ -234,6 +281,89 @@ mod tests {
     }
 
     #[test]
+    fn test_jacobian_lamellar() {
+        let jacobian = CellJacobian::new(1e-6);
+        let cell = UnitCell::lamellar(10.0).unwrap();
+
+        let j = jacobian.compute(&cell).unwrap();
+
+        // Lamellar has 1 parameter (a), shape is [[a]]
+        // So J should have shape (1, 1, 1) with J[0,0,0] = ∂h[0,0]/∂a = 1
+        assert_eq!(j.shape(), &[1, 1, 1]);
+        assert_approx_eq!(f64, j[[0, 0, 0]], 1.0, epsilon = 1e-5);
+    }
+
+    #[test]
+    fn test_jacobian_rectangular() {
+        let jacobian = CellJacobian::new(1e-6);
+        let cell = UnitCell::rectangular(10.0, 8.0).unwrap();
+
+        let j = jacobian.compute(&cell).unwrap();
+
+        // Rectangular has 2 parameters (a, b)
+        // Shape is [[a, 0], [0, b]]
+        // J[0,0,0] = ∂h[0,0]/∂a = 1
+        // J[1,1,1] = ∂h[1,1]/∂b = 1
+        // All others should be 0
+        assert_eq!(j.shape(), &[2, 2, 2]);
+        assert_approx_eq!(f64, j[[0, 0, 0]], 1.0, epsilon = 1e-5); // ∂h[0,0]/∂a
+        assert_approx_eq!(f64, j[[1, 1, 1]], 1.0, epsilon = 1e-5); // ∂h[1,1]/∂b
+        assert_approx_eq!(f64, j[[0, 1, 0]], 0.0, epsilon = 1e-5); // ∂h[0,1]/∂a
+        assert_approx_eq!(f64, j[[0, 1, 1]], 0.0, epsilon = 1e-5); // ∂h[0,1]/∂b
+    }
+
+    #[test]
+    fn test_jacobian_cubic() {
+        let jacobian = CellJacobian::new(1e-6);
+        let cell = UnitCell::cubic(10.0).unwrap();
+
+        let j = jacobian.compute(&cell).unwrap();
+
+        // Cubic has 1 parameter (a), shape is [[a, 0, 0], [0, a, 0], [0, 0, a]]
+        // J[0,0,0] = J[1,1,0] = J[2,2,0] = 1 (diagonal elements)
+        assert_eq!(j.shape(), &[3, 3, 1]);
+        assert_approx_eq!(f64, j[[0, 0, 0]], 1.0, epsilon = 1e-5);
+        assert_approx_eq!(f64, j[[1, 1, 0]], 1.0, epsilon = 1e-5);
+        assert_approx_eq!(f64, j[[2, 2, 0]], 1.0, epsilon = 1e-5);
+    }
+
+    #[test]
+    fn test_project_stress_lamellar() {
+        use ndarray::array;
+
+        let jacobian = CellJacobian::new(1e-6);
+        let cell = UnitCell::lamellar(10.0).unwrap();
+
+        let j = jacobian.compute(&cell).unwrap();
+        let stress = array![[2.0]];
+
+        let grad = jacobian.project_stress(&j, &stress);
+
+        // grad[0] = Σ_{i,j} J[i,j,0] * stress[i,j] = J[0,0,0] * stress[0,0] = 1.0 * 2.0 = 2.0
+        assert_eq!(grad.len(), 1);
+        assert_approx_eq!(f64, grad[0], 2.0, epsilon = 1e-5);
+    }
+
+    #[test]
+    fn test_project_stress_rectangular() {
+        use ndarray::array;
+
+        let jacobian = CellJacobian::new(1e-6);
+        let cell = UnitCell::rectangular(10.0, 8.0).unwrap();
+
+        let j = jacobian.compute(&cell).unwrap();
+        let stress = array![[1.0, 0.0], [0.0, 2.0]];
+
+        let grad = jacobian.project_stress(&j, &stress);
+
+        // grad[0] = J[0,0,0] * stress[0,0] = 1.0 * 1.0 = 1.0
+        // grad[1] = J[1,1,1] * stress[1,1] = 1.0 * 2.0 = 2.0
+        assert_eq!(grad.len(), 2);
+        assert_approx_eq!(f64, grad[0], 1.0, epsilon = 1e-5);
+        assert_approx_eq!(f64, grad[1], 2.0, epsilon = 1e-5);
+    }
+
+    #[test]
     fn test_cell_updater_step() {
         let mut system = create_test_system();
         system.update();
@@ -259,126 +389,118 @@ mod tests {
 
         // Check that cell parameter is still positive
         let cell = system.domain().cell();
-        match cell.parameters() {
-            CellParameters::Lamellar { a } => {
-                assert!(a > 0.0, "Cell parameter should remain positive");
-            }
-            _ => panic!("Expected Lamellar cell"),
-        }
+        let a = cell.values()[0];
+        assert!(a > 0.0, "Cell parameter should remain positive");
     }
 
     #[test]
-    fn test_update_parameters_lamellar() {
+    fn test_update_cell_lamellar() {
+        use ndarray::array;
+        use crate::domain::CellParametersVariant;
+
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::lamellar(10.0).unwrap();
-        let params = cell.parameters();
-        let shape = cell.shape();
-        let stress = vec![2.0]; // Positive stress → decrease a
+        let stress = array![[2.0]]; // Positive stress → decrease a
 
-        let new_params = updater.update_parameters(params, &stress, shape).unwrap();
+        let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        match new_params {
-            CellParameters::Lamellar { a } => {
-                assert!(a < 10.0, "Parameter should decrease with positive stress");
-                assert!(a > 0.0, "Parameter should remain positive");
-            }
-            _ => panic!("Expected Lamellar parameters"),
-        }
+        assert_eq!(new_cell.variant(), CellParametersVariant::Lamellar);
+        let a = new_cell.values()[0];
+        assert!(a < 10.0, "Parameter should decrease with positive stress");
+        assert!(a > 0.0, "Parameter should remain positive");
     }
 
     #[test]
-    fn test_update_parameters_square() {
+    fn test_update_cell_square() {
+        use ndarray::array;
+        use crate::domain::CellParametersVariant;
+
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::square(10.0).unwrap();
-        let params = cell.parameters();
-        let shape = cell.shape();
-        let stress = vec![1.0, 1.0, 0.0]; // Equal diagonal stress
+        let stress = array![[1.0, 0.0], [0.0, 1.0]]; // Equal diagonal stress
 
-        let new_params = updater.update_parameters(params, &stress, shape).unwrap();
+        let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        match new_params {
-            CellParameters::Square { a } => {
-                // Average stress = 1.0, so a should decrease by 1.0
-                assert_approx_eq!(f64, a, 9.0, epsilon = 1e-10);
-            }
-            _ => panic!("Expected Square parameters"),
-        }
+        assert_eq!(new_cell.variant(), CellParametersVariant::Square);
+        let a = new_cell.values()[0];
+        // Jacobian: both diagonal elements contribute to 'a' parameter
+        // grad = σ[0,0] + σ[1,1] = 1.0 + 1.0 = 2.0
+        // a_new = 10 - 1.0 * 2.0 = 8.0
+        assert_approx_eq!(f64, a, 8.0, epsilon = 1e-5);
     }
 
     #[test]
-    fn test_update_parameters_rectangular() {
+    fn test_update_cell_rectangular() {
+        use ndarray::array;
+        use crate::domain::CellParametersVariant;
+
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::rectangular(10.0, 8.0).unwrap();
-        let params = cell.parameters();
-        let shape = cell.shape();
-        let stress = vec![2.0, 1.0, 0.0]; // Different diagonal stresses
+        let stress = array![[2.0, 0.0], [0.0, 1.0]]; // Different diagonal stresses
 
-        let new_params = updater.update_parameters(params, &stress, shape).unwrap();
+        let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        match new_params {
-            CellParameters::Rectangular { a, b } => {
-                assert_approx_eq!(f64, a, 8.0, epsilon = 1e-10); // 10 - 2
-                assert_approx_eq!(f64, b, 7.0, epsilon = 1e-10); // 8 - 1
-            }
-            _ => panic!("Expected Rectangular parameters"),
-        }
+        assert_eq!(new_cell.variant(), CellParametersVariant::Rectangular);
+        let values = new_cell.values();
+        // Relaxed epsilon to account for finite difference numerical error
+        assert_approx_eq!(f64, values[0], 8.0, epsilon = 1e-5); // 10 - 2
+        assert_approx_eq!(f64, values[1], 7.0, epsilon = 1e-5); // 8 - 1
     }
 
     #[test]
-    fn test_update_parameters_cubic() {
+    fn test_update_cell_cubic() {
+        use ndarray::array;
+        use crate::domain::CellParametersVariant;
+
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::cubic(10.0).unwrap();
-        let params = cell.parameters();
-        let shape = cell.shape();
-        let stress = vec![1.0, 2.0, 3.0, 0.0, 0.0, 0.0]; // Average = 2.0
+        let stress = array![[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]];
 
-        let new_params = updater.update_parameters(params, &stress, shape).unwrap();
+        let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        match new_params {
-            CellParameters::Cubic { a } => {
-                assert_approx_eq!(f64, a, 8.0, epsilon = 1e-10); // 10 - 2
-            }
-            _ => panic!("Expected Cubic parameters"),
-        }
+        assert_eq!(new_cell.variant(), CellParametersVariant::Cubic);
+        let a = new_cell.values()[0];
+        // Jacobian: all three diagonal elements contribute to 'a' parameter
+        // grad = σ[0,0] + σ[1,1] + σ[2,2] = 1.0 + 2.0 + 3.0 = 6.0
+        // a_new = 10 - 1.0 * 6.0 = 4.0
+        assert_approx_eq!(f64, a, 4.0, epsilon = 1e-5);
     }
 
     #[test]
-    fn test_update_parameters_orthorhombic() {
+    fn test_update_cell_orthorhombic() {
+        use ndarray::array;
+        use crate::domain::CellParametersVariant;
+
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::orthorhombic(10.0, 8.0, 6.0).unwrap();
-        let params = cell.parameters();
-        let shape = cell.shape();
-        let stress = vec![1.0, 2.0, 3.0, 0.0, 0.0, 0.0];
+        let stress = array![[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]];
 
-        let new_params = updater.update_parameters(params, &stress, shape).unwrap();
+        let new_cell = updater.update_cell(&cell, &stress).unwrap();
 
-        match new_params {
-            CellParameters::Orthorhombic { a, b, c } => {
-                assert_approx_eq!(f64, a, 9.0, epsilon = 1e-10); // 10 - 1
-                assert_approx_eq!(f64, b, 6.0, epsilon = 1e-10); // 8 - 2
-                assert_approx_eq!(f64, c, 3.0, epsilon = 1e-10); // 6 - 3
-            }
-            _ => panic!("Expected Orthorhombic parameters"),
-        }
+        assert_eq!(new_cell.variant(), CellParametersVariant::Orthorhombic);
+        let values = new_cell.values();
+        // Relaxed epsilon to account for finite difference numerical error
+        assert_approx_eq!(f64, values[0], 9.0, epsilon = 1e-5); // 10 - 1
+        assert_approx_eq!(f64, values[1], 6.0, epsilon = 1e-5); // 8 - 2
+        assert_approx_eq!(f64, values[2], 3.0, epsilon = 1e-5); // 6 - 3
     }
 
     #[test]
     fn test_hexagonal_cell_supported() {
+        use ndarray::array;
+        use crate::domain::CellParametersVariant;
+
         let updater = CellUpdater::new(1.0);
         let cell = UnitCell::hexagonal_2d(10.0).unwrap();
-        let params = cell.parameters();
-        let shape = cell.shape();
-        let stress = vec![1.0, 1.0, 0.0];
+        let stress = array![[1.0, 0.0], [0.0, 1.0]];
 
-        let result = updater.update_parameters(params, &stress, shape);
+        let result = updater.update_cell(&cell, &stress);
         assert!(result.is_ok(), "Hexagonal2D should now be supported");
 
-        match result.unwrap() {
-            CellParameters::Hexagonal2D { a } => {
-                // Should average diagonal stress
-                assert!(a < 10.0);
-            }
-            _ => panic!("Expected Hexagonal2D parameters"),
-        }
+        let new_cell = result.unwrap();
+        assert_eq!(new_cell.variant(), CellParametersVariant::Hexagonal2D);
+        let a = new_cell.values()[0];
+        // Should average diagonal stress
+        assert!(a < 10.0);
     }
 }

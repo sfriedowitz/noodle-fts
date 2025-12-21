@@ -87,7 +87,7 @@ impl Domain {
     pub fn ksq(&self) -> RField {
         // TODO: Do we care that this is allocating?
         let kvecs = self.kvecs();
-        let kvecs_scaled = kvecs.dot(self.cell.metric_inv());
+        let kvecs_scaled = kvecs.dot(&self.cell.metric_inv());
         (kvecs * kvecs_scaled)
             .sum_axis(Axis(1))
             .into_shape_with_order(self.mesh.kmesh())
