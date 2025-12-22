@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ndarray::Array2;
+use ndarray::{Array1, Array2, Axis};
 
 use super::{Propagator, PropagatorStep, StepMethod, propagator::PropagatorDirection};
 use crate::{
@@ -138,13 +138,8 @@ impl BlockSolver {
         // TODO: Can any of this be done during propagator updates?
         // TODO: Can we get rid of any extra allocations here?
         let volume = domain.cell().volume();
-        let kvecs = domain.kvecs();
-        let metric_inv = domain.cell().metric_inv();
+        let kvecs = domain.kvecs().dot(&domain.cell().metric_inv());
         let nk = kvecs.nrows();
-        let ndim = domain.mesh().ndim();
-
-        // Compute k-space transformed vectors
-        let kvecs_transformed = kvecs.dot(&metric_inv);
 
         // Prefactor: -(b²V_monomer φ) / (6V Q)
         let b_sq = self.block.segment_length * self.block.segment_length;
@@ -156,7 +151,7 @@ impl BlockSolver {
         let mut qr_k = CField::zeros(kmesh);
 
         // Compute W(k) = ∫ q_f(k,s) q_r(k,s) ds
-        let mut weights = vec![0.0; nk];
+        let mut weights = Array1::zeros(nk);
         let ns = self.ns();
 
         for s in 0..ns {
@@ -176,29 +171,19 @@ impl BlockSolver {
                 4.0
             };
 
-            // Accumulate q_f * q_r†
-            for (ik, (&qf, &qr)) in qf_k.iter().zip(qr_k.iter()).enumerate() {
-                weights[ik] += coef * (qf * qr.conj()).re;
+            // Accumulate q_f * q_r† using iterator chaining
+            for ((w, &qf), &qr) in weights.iter_mut().zip(qf_k.iter()).zip(qr_k.iter()) {
+                *w += coef * (qf * qr.conj()).re;
             }
         }
 
-        // Normalize integral
-        for w in weights.iter_mut() {
-            *w *= self.ds / 3.0;
-        }
+        // Normalize integral and apply prefactor
+        weights *= prefactor * self.ds / 3.0;
 
-        // Update stress tensor components: σ_ij = Σ_k k_i k_j W(k)
-        self.stress.fill(0.0);
-        for ik in 0..nk {
-            let k = kvecs_transformed.row(ik);
-            let w = weights[ik];
-
-            for i in 0..ndim {
-                for j in 0..ndim {
-                    self.stress[[i, j]] += prefactor * w * k[i] * k[j];
-                }
-            }
-        }
+        // Update stress tensor: σ_ij = Σ_k k_i k_j W(k) = K^T * diag(weights) * K
+        // Use broadcasting to scale rows: need (nk, 1) shape for row-wise scaling
+        let kvecs_weighted = &kvecs * &weights.insert_axis(Axis(1));
+        self.stress = kvecs.t().dot(&kvecs_weighted);
     }
 }
 

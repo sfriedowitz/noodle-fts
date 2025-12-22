@@ -345,6 +345,15 @@ impl System {
         }
         (rsum / wsum).sqrt()
     }
+
+    /// Return the stress error as the Frobenius norm of the stress tensor.
+    ///
+    /// The stress error is computed as sqrt(Σ σ_ij^2), which gives the
+    /// magnitude of the stress tensor. This value goes to zero when the
+    /// system reaches mechanical equilibrium (stress-free state).
+    pub fn stress_error(&self) -> f64 {
+        self.stress.fold(0.0, |acc, &s| acc + s * s).sqrt()
+    }
 }
 
 #[derive(Debug)]

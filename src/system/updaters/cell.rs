@@ -1,4 +1,4 @@
-use ndarray::{Array2, Array3};
+use ndarray::{Array1, Array2, Array3};
 
 use crate::{
     domain::{CellLattice, UnitCell},
@@ -68,13 +68,13 @@ impl CellJacobian {
     /// - `stress`: The stress tensor (ndim × ndim)
     ///
     /// # Returns
-    /// Vec<f64> of length nparams containing the gradient in parameter space
-    pub fn project_stress(&self, jacobian: &Array3<f64>, stress: &Array2<f64>) -> Vec<f64> {
+    /// Array1<f64> of length nparams containing the gradient in parameter space
+    pub fn project_stress(&self, jacobian: &Array3<f64>, stress: &Array2<f64>) -> Array1<f64> {
         let shape = jacobian.shape();
         let ndim = shape[0];
         let nparams = shape[2];
 
-        let mut grad_params = vec![0.0; nparams];
+        let mut grad_params = Array1::zeros(nparams);
 
         for k in 0..nparams {
             let mut sum = 0.0;
@@ -99,16 +99,7 @@ impl CellJacobian {
 /// The update rule uses finite difference Jacobian projection:
 /// 1. Compute J = ∂h/∂params using finite differences
 /// 2. Project stress: grad = J^T · σ
-/// 3. Update: params_new = params_old - damping * grad
-///
-/// # Algorithm
-/// - First-order damped dynamics
-/// - Jacobian-based projection from stress to parameter gradients
-/// - Automatic handling of constraints for all cell types
-///
-/// # References
-/// - Parrinello-Rahman cell relaxation dynamics
-/// - Fredrickson's "The Equilibrium Theory of Inhomogeneous Polymers"
+/// 3. Update: params_new = params_old - step_size * grad
 #[derive(Debug, Clone)]
 pub struct CellUpdater {
     step_size: f64,
@@ -127,13 +118,6 @@ impl CellUpdater {
         self.step_size
     }
 
-    /// Update cell parameters using Jacobian-based stress projection.
-    ///
-    /// This method:
-    /// 1. Computes the Jacobian J = ∂h/∂params using finite differences
-    /// 2. Projects stress to parameter space: grad = Σ_{i,j} J[i,j,k] * σ[i,j]
-    /// 3. Updates parameters: params_new = params_old - damping * grad
-    /// 4. Enforces bounds on parameters
     fn update_cell(&self, cell: &UnitCell, stress: &Array2<f64>) -> crate::Result<UnitCell> {
         // 1. Compute Jacobian
         let jacobian = self.jacobian.compute(cell)?;
@@ -141,80 +125,71 @@ impl CellUpdater {
         // 2. Project stress to parameter gradient
         let grad_params = self.jacobian.project_stress(&jacobian, stress);
 
-        // 3. Update parameters
-        let mut new_values = cell.parameters().to_vec();
-        for (i, &grad) in grad_params.iter().enumerate() {
-            new_values[i] -= self.step_size * grad;
-        }
+        // 3. Update parameters (vectorized)
+        let mut new_parameters = cell.parameters() - self.step_size * &grad_params;
 
         // 4. Enforce bounds
-        Self::clamp_parameters(&mut new_values, cell.lattice());
+        Self::clamp_parameters(&mut new_parameters, cell.lattice());
 
         // 5. Construct new cell
-        UnitCell::new(cell.lattice(), new_values)
+        UnitCell::new(cell.lattice(), new_parameters)
     }
 
     /// Clamp parameters to physically valid ranges.
     ///
     /// - Lengths must be > 0.1 (prevents collapse)
     /// - Angles must be in (0.1, π - 0.1) (prevents degenerate cells)
-    fn clamp_parameters(values: &mut [f64], lattice: CellLattice) {
+    fn clamp_parameters(parameters: &mut Array1<f64>, lattice: CellLattice) {
         match lattice {
             // Length-only cells
             CellLattice::Lamellar | CellLattice::Square | CellLattice::Hexagonal2D | CellLattice::Cubic => {
-                for v in values.iter_mut() {
-                    *v = v.max(0.1);
+                for p in parameters.iter_mut() {
+                    *p = p.max(0.1);
                 }
             }
             // Length-only cells (multiple lengths)
             CellLattice::Rectangular | CellLattice::Tetragonal | CellLattice::Orthorhombic => {
-                for v in values.iter_mut() {
-                    *v = v.max(0.1);
+                for p in parameters.iter_mut() {
+                    *p = p.max(0.1);
                 }
             }
             // Oblique: [a, b, gamma]
             CellLattice::Oblique => {
-                values[0] = values[0].max(0.1);
-                values[1] = values[1].max(0.1);
-                values[2] = values[2].clamp(0.1, std::f64::consts::PI - 0.1);
+                parameters[0] = parameters[0].max(0.1);
+                parameters[1] = parameters[1].max(0.1);
+                parameters[2] = parameters[2].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Rhombohedral: [a, alpha]
             CellLattice::Rhombohedral => {
-                values[0] = values[0].max(0.1);
-                values[1] = values[1].clamp(0.1, std::f64::consts::PI - 0.1);
+                parameters[0] = parameters[0].max(0.1);
+                parameters[1] = parameters[1].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Monoclinic: [a, b, c, beta]
             CellLattice::Monoclinic => {
-                values[0] = values[0].max(0.1);
-                values[1] = values[1].max(0.1);
-                values[2] = values[2].max(0.1);
-                values[3] = values[3].clamp(0.1, std::f64::consts::PI - 0.1);
+                parameters[0] = parameters[0].max(0.1);
+                parameters[1] = parameters[1].max(0.1);
+                parameters[2] = parameters[2].max(0.1);
+                parameters[3] = parameters[3].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Triclinic: [a, b, c, alpha, beta, gamma]
             CellLattice::Triclinic => {
-                values[0] = values[0].max(0.1);
-                values[1] = values[1].max(0.1);
-                values[2] = values[2].max(0.1);
-                values[3] = values[3].clamp(0.1, std::f64::consts::PI - 0.1);
-                values[4] = values[4].clamp(0.1, std::f64::consts::PI - 0.1);
-                values[5] = values[5].clamp(0.1, std::f64::consts::PI - 0.1);
+                parameters[0] = parameters[0].max(0.1);
+                parameters[1] = parameters[1].max(0.1);
+                parameters[2] = parameters[2].max(0.1);
+                parameters[3] = parameters[3].clamp(0.1, std::f64::consts::PI - 0.1);
+                parameters[4] = parameters[4].clamp(0.1, std::f64::consts::PI - 0.1);
+                parameters[5] = parameters[5].clamp(0.1, std::f64::consts::PI - 0.1);
             }
             // Hexagonal3D: [a, c]
             CellLattice::Hexagonal3D => {
-                values[0] = values[0].max(0.1);
-                values[1] = values[1].max(0.1);
+                parameters[0] = parameters[0].max(0.1);
+                parameters[1] = parameters[1].max(0.1);
             }
         }
     }
 }
 
 impl super::SystemUpdater for CellUpdater {
-    /// Perform one cell parameter update step.
-    ///
-    /// This method:
-    /// 1. Updates cell parameters based on stress: p_new = p_old - damping * σ
-    /// 2. Reconstructs the UnitCell with new parameters
-    /// 3. Updates the system state with new cell
     fn step(&mut self, system: &mut System) -> crate::Result<()> {
         let stress = system.stress();
         let cell = system.domain().cell();
@@ -223,7 +198,7 @@ impl super::SystemUpdater for CellUpdater {
         let new_cell = self.update_cell(cell, stress)?;
 
         // Assign new cell to system
-        *system.domain_mut().cell_mut() = new_cell;
+        system.domain_mut().set_cell(new_cell);
 
         // Recompute system state with new cell (updates ksq, concentrations, etc.)
         system.update();
