@@ -1,4 +1,4 @@
-use numpy::{PyArray2, ToPyArray};
+use numpy::{PyArray1, PyArray2, ToPyArray};
 use pyo3::{PyClass, exceptions::PyValueError, prelude::*, types::PyTuple};
 
 use super::error::ToPyResult;
@@ -36,6 +36,11 @@ impl PyMesh {
             Mesh::Two(nx, ny) => format!("Mesh({nx}, {ny})"),
             Mesh::Three(nx, ny, nz) => format!("Mesh({nx}, {ny}, {nz})"),
         }
+    }
+
+    #[getter]
+    fn get_ndim(&self) -> usize {
+        self.0.ndim()
     }
 
     #[getter]
@@ -83,7 +88,7 @@ impl PyUnitCell {
 impl PyUnitCell {
     fn __repr__(&self) -> String {
         // TODO: No idea how to get the name of the subclass at runtime
-        format!("{:?}({:?})", self.0.lattice(), self.0.parameters())
+        format!("{:?}({:?})", self.0.lattice(), self.0.parameters().to_vec())
     }
 
     #[getter]
@@ -92,8 +97,13 @@ impl PyUnitCell {
     }
 
     #[getter]
-    fn get_parameters(&self) -> Vec<f64> {
-        self.0.parameters().to_vec()
+    fn get_volume(&self) -> f64 {
+        self.0.volume()
+    }
+
+    #[getter]
+    fn get_parameters<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        self.0.parameters().to_pyarray(py)
     }
 
     #[getter]

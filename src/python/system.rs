@@ -64,6 +64,10 @@ impl PySystem {
         self.0.field_error()
     }
 
+    fn stress_error(&self) -> f64 {
+        self.0.stress_error()
+    }
+
     fn set_interaction(&mut self, i: usize, j: usize, chi: f64) {
         self.0.interaction_mut().set_chi(i, j, chi)
     }
@@ -98,7 +102,7 @@ impl PySystem {
         ToPyResult(self.0.assign_concentration(id, cview)).into_py()
     }
 
-    #[pyo3(signature = (*, scale=0.1, seed=None))]
+    #[pyo3(signature = (*, scale=0.01, seed=None))]
     fn sample_fields(&mut self, scale: f64, seed: Option<u64>) -> PyResult<()> {
         if let Ok(distr) = Normal::new(0.0, scale) {
             let mut rng = seed

@@ -67,8 +67,8 @@ impl Domain {
         &self.cell
     }
 
-    pub fn cell_mut(&mut self) -> &mut UnitCell {
-        &mut self.cell
+    pub fn set_cell(&mut self, cell: UnitCell) {
+        self.cell = cell;
     }
 
     /// Get the wave vectors in the reciprocal lattice.
