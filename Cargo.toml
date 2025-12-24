@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [features]
 "default" = ["openblas-system"]
-"openblas" = ["ndarray-linalg/openblas"]
+"openblas-static" = ["ndarray-linalg/openblas-static"]
 "openblas-system" = ["ndarray-linalg/openblas-system"]
 python = ["pyo3", "numpy"]
 
