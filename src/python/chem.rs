@@ -25,12 +25,12 @@ impl PyMonomer {
     }
 
     #[getter]
-    fn get_id(&self) -> usize {
+    fn id(&self) -> usize {
         self.0.id
     }
 
     #[getter]
-    fn get_size(&self) -> f64 {
+    fn size(&self) -> f64 {
         self.0.size
     }
 }
@@ -56,17 +56,17 @@ impl PyBlock {
     }
 
     #[getter]
-    fn get_monomer(&self) -> PyMonomer {
+    fn monomer(&self) -> PyMonomer {
         self.0.monomer.into()
     }
 
     #[getter]
-    fn get_repeat_units(&self) -> usize {
+    fn repeat_units(&self) -> usize {
         self.0.repeat_units
     }
 
     #[getter]
-    fn get_segment_length(&self) -> f64 {
+    fn segment_length(&self) -> f64 {
         self.0.segment_length
     }
 }
@@ -79,16 +79,32 @@ impl_py_conversions!(Species, PySpecies);
 
 #[pymethods]
 impl PySpecies {
+    fn __repr__(&self) -> String {
+        let phi = self.0.phi();
+        let size = self.0.size();
+        match &self.0 {
+            Species::Point(point) => {
+                let monomer_id = point.monomer.id;
+                format!("Point(monomer={monomer_id}, phi={phi:.2})")
+            }
+            Species::Polymer(polymer) => {
+                let nblocks = polymer.blocks.len();
+                format!("Polymer(blocks={nblocks}, phi={phi:.2}, size={size:.2})")
+            }
+        }
+    }
+
     #[getter]
-    fn get_phi(&self) -> f64 {
+    fn phi(&self) -> f64 {
         self.0.phi()
     }
 
     #[getter]
-    fn get_size(&self) -> f64 {
+    fn size(&self) -> f64 {
         self.0.size()
     }
 
+    #[getter]
     fn monomers(&self) -> Vec<PyMonomer> {
         self.0.monomers().iter().copied().map(|m| m.into()).collect()
     }
@@ -125,7 +141,7 @@ impl PyPolymer {
     }
 
     #[getter]
-    fn get_blocks(self_: PyRef<'_, Self>) -> Vec<PyBlock> {
+    fn blocks(self_: PyRef<'_, Self>) -> Vec<PyBlock> {
         let super_ = self_.as_ref();
         match &super_.0 {
             Species::Polymer(polymer) => polymer.blocks.iter().cloned().map(|b| b.into()).collect(),

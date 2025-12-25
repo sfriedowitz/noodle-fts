@@ -14,6 +14,7 @@ from pynoodle._core import (
     System,
     UnitCell,
 )
+from pynoodle.builder import SystemBuilder
 
 __all__ = [
     "Block",
@@ -30,4 +31,5 @@ __all__ = [
     "System",
     "FieldUpdater",
     "CellUpdater",
+    "SystemBuilder",
 ]

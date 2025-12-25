@@ -159,3 +159,11 @@ Follow rustfmt.toml configuration:
 - max_width = 110
 - use_field_init_shorthand = true
 - Imports: grouped by Std/External/Crate, reordered automatically
+
+### Python Code Style
+
+- **Never use** `from __future__ import annotations` - causes issues with type checking
+- **Always use absolute imports**, never relative imports (e.g., `from pynoodle.configs import X` not `from .configs import X`)
+- Use type hints directly without string quotes when possible
+- Follow ruff formatting and linting rules in pyproject.toml
+- **Never add docstrings to test functions or classes** - test names should be self-explanatory

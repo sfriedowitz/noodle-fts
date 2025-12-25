@@ -53,9 +53,11 @@ class SCFTState:
     @property
     def is_nan(self) -> bool:
         """Check if any state values are NaN."""
-        return np.any(
-            np.isnan(
-                [self.field_error, self.stress_error, self.free_energy, self.free_energy_bulk]
+        return bool(
+            np.any(
+                np.isnan(
+                    [self.field_error, self.stress_error, self.free_energy, self.free_energy_bulk]
+                )
             )
         )
 
@@ -93,21 +95,21 @@ class SCFT:
         system: System,
         *,
         options: SCFTOptions | None = None,
-    ):
+    ) -> None:
         """Initialize SCFT solver.
 
         Args:
             system: The polymer system to solve
             options: Configuration options (uses defaults if not provided)
         """
-        self.system = system
-        self.options = options or SCFTOptions()
+        self.system: System = system
+        self.options: SCFTOptions = options or SCFTOptions()
 
         # Create field updater
-        self.field_updater = FieldUpdater(system, self.options.field_step_size)
+        self.field_updater: FieldUpdater = FieldUpdater(system, self.options.field_step_size)
 
         # Create cell updater if enabled
-        self.cell_updater = (
+        self.cell_updater: CellUpdater | None = (
             CellUpdater(self.options.cell_step_size) if self.options.variable_cell else None
         )
 
@@ -154,8 +156,8 @@ class SCFT:
     def _get_state(self, start: datetime, step: int) -> SCFTState:
         """Get current state of the SCFT iteration."""
         elapsed = datetime.now() - start
-        field_error = self.system.field_error()
-        stress_error = self.system.stress_error()
+        field_error = self.system.get_field_error()
+        stress_error = self.system.get_stress_error()
 
         # Check convergence: fields must always converge
         # If variable_cell is enabled, stress must also converge
@@ -171,6 +173,6 @@ class SCFT:
             is_converged=is_converged,
             field_error=field_error,
             stress_error=stress_error,
-            free_energy=self.system.free_energy(),
-            free_energy_bulk=self.system.free_energy_bulk(),
+            free_energy=self.system.get_free_energy(),
+            free_energy_bulk=self.system.get_free_energy_bulk(),
         )

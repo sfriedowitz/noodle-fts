@@ -1,0 +1,32 @@
+mesh:
+  dimensions: [32, 32] # 2D mesh
+
+cell:
+  type: hexagonal2d
+  a: 6.0 # Hexagonal lattice constant
+
+monomers:
+  - id: 0
+    size: 1.0
+  - id: 1
+    size: 1.0
+
+species:
+  - type: polymer
+    phi: 1.0
+    contour_steps: 300
+    blocks:
+      - monomer_id: 0
+        repeat_units: 25
+        segment_length: 0.02
+      - monomer_id: 1
+        repeat_units: 50
+        segment_length: 0.02
+      - monomer_id: 0
+        repeat_units: 25
+        segment_length: 0.02
+
+interactions:
+  - i: 0
+    j: 1
+    chi: 1.0

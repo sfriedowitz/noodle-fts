@@ -1,0 +1,29 @@
+mesh:
+  dimensions: [64] # 1D mesh with 64 grid points
+
+cell:
+  type: lamellar
+  a: 5.0 # Lamellar spacing
+
+monomers:
+  - id: 0
+    size: 1.0
+  - id: 1
+    size: 1.0
+
+species:
+  - type: polymer
+    phi: 1.0 # Volume fraction
+    contour_steps: 200 # Number of contour steps
+    blocks:
+      - monomer_id: 0
+        repeat_units: 50
+        segment_length: 0.02
+      - monomer_id: 1
+        repeat_units: 50
+        segment_length: 0.02
+
+interactions:
+  - i: 0
+    j: 1
+    chi: 0.5 # Flory-Huggins parameter
