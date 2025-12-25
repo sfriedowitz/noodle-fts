@@ -19,8 +19,16 @@ pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<domain::PyUnitCell>()?;
     m.add_class::<domain::PyLamellarCell>()?;
     m.add_class::<domain::PySquareCell>()?;
+    m.add_class::<domain::PyRectangularCell>()?;
     m.add_class::<domain::PyHexagonal2DCell>()?;
+    m.add_class::<domain::PyObliqueCell>()?;
     m.add_class::<domain::PyCubicCell>()?;
+    m.add_class::<domain::PyTetragonalCell>()?;
+    m.add_class::<domain::PyOrthorhombicCell>()?;
+    m.add_class::<domain::PyRhombohedralCell>()?;
+    m.add_class::<domain::PyHexagonal3DCell>()?;
+    m.add_class::<domain::PyMonoclinicCell>()?;
+    m.add_class::<domain::PyTriclinicCell>()?;
     // System
     m.add_class::<system::PySystem>()?;
     m.add_class::<system::PyFieldUpdater>()?;

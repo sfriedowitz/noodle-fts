@@ -2,25 +2,43 @@ from pynoodle import (
     Block,
     CubicCell,
     Hexagonal2DCell,
+    Hexagonal3DCell,
     LamellarCell,
     Mesh,
+    MonoclinicCell,
     Monomer,
+    ObliqueCell,
+    OrthorhombicCell,
     Point,
     Polymer,
+    RectangularCell,
+    RhombohedralCell,
     SquareCell,
     System,
+    TetragonalCell,
+    TriclinicCell,
+    UnitCell,
 )
 from pynoodle.configs import (
     BlockConfig,
     CubicCellConfig,
     Hexagonal2DCellConfig,
+    Hexagonal3DCellConfig,
     LamellarCellConfig,
     MeshConfig,
+    MonoclinicCellConfig,
     MonomerConfig,
+    ObliqueCellConfig,
+    OrthorhombicCellConfig,
     PointConfig,
     PolymerConfig,
+    RectangularCellConfig,
+    RhombohedralCellConfig,
     SquareCellConfig,
     SystemConfig,
+    TetragonalCellConfig,
+    TriclinicCellConfig,
+    UnitCellConfig,
 )
 
 
@@ -96,9 +114,7 @@ class SystemBuilder:
         return Mesh(*config.dimensions)
 
     @staticmethod
-    def build_cell(
-        config: LamellarCellConfig | SquareCellConfig | Hexagonal2DCellConfig | CubicCellConfig,
-    ) -> LamellarCell | SquareCell | Hexagonal2DCell | CubicCell:
+    def build_cell(config: UnitCellConfig) -> UnitCell:
         """Build a UnitCell from configuration.
 
         Args:
@@ -107,17 +123,34 @@ class SystemBuilder:
         Returns:
             UnitCell instance
         """
-        if isinstance(config, LamellarCellConfig):
-            return LamellarCell(a=config.a)
-        elif isinstance(config, SquareCellConfig):
-            return SquareCell(a=config.a)
-        elif isinstance(config, Hexagonal2DCellConfig):
-            return Hexagonal2DCell(a=config.a)
-        elif isinstance(config, CubicCellConfig):
-            return CubicCell(a=config.a)
-        else:
-            msg = f"Unknown cell type: {type(config)}"
-            raise ValueError(msg)
+        match config:
+            case LamellarCellConfig(a=a):
+                return LamellarCell(a=a)
+            case SquareCellConfig(a=a):
+                return SquareCell(a=a)
+            case RectangularCellConfig(a=a, b=b):
+                return RectangularCell(a=a, b=b)
+            case Hexagonal2DCellConfig(a=a):
+                return Hexagonal2DCell(a=a)
+            case ObliqueCellConfig(a=a, b=b, gamma=gamma):
+                return ObliqueCell(a=a, b=b, gamma=gamma)
+            case CubicCellConfig(a=a):
+                return CubicCell(a=a)
+            case TetragonalCellConfig(a=a, c=c):
+                return TetragonalCell(a=a, c=c)
+            case OrthorhombicCellConfig(a=a, b=b, c=c):
+                return OrthorhombicCell(a=a, b=b, c=c)
+            case RhombohedralCellConfig(a=a, alpha=alpha):
+                return RhombohedralCell(a=a, alpha=alpha)
+            case Hexagonal3DCellConfig(a=a, c=c):
+                return Hexagonal3DCell(a=a, c=c)
+            case MonoclinicCellConfig(a=a, b=b, c=c, beta=beta):
+                return MonoclinicCell(a=a, b=b, c=c, beta=beta)
+            case TriclinicCellConfig(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma):
+                return TriclinicCell(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
+            case _:
+                msg = f"Unknown cell type: {type(config)}"
+                raise ValueError(msg)
 
     @staticmethod
     def build_system(config: SystemConfig) -> System:
