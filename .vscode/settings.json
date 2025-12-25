@@ -11,4 +11,5 @@
     "rust-analyzer.cargo.features": [
         "python"
     ],
+    "rust-analyzer.check.command": "clippy",
 }

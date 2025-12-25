@@ -35,7 +35,7 @@ impl System {
             .flat_map(|s| s.monomers())
             .map(|m| (m.id, m))
             .collect();
-        let monomer_ids: Vec<usize> = monomers.keys().into_iter().cloned().collect();
+        let monomer_ids: Vec<usize> = monomers.keys().cloned().collect();
 
         let domain = Domain::new(mesh, cell)?;
         let interaction = Interaction::new();

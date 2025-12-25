@@ -4,7 +4,7 @@ pub const THIRD_PI: f64 = PI / 3.0;
 pub const TWO_PI: f64 = 2.0 * PI;
 
 pub fn fftshift_index(idx: usize, n: usize) -> f64 {
-    if idx <= n / 2 - 1 {
+    if idx < n / 2 {
         idx as f64
     } else {
         idx as f64 - n as f64

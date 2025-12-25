@@ -72,7 +72,7 @@ impl Polymer {
     }
 
     pub fn nblock(&self) -> usize {
-        return self.blocks.len();
+        self.blocks.len()
     }
 }
 

@@ -1,9 +1,9 @@
 mod cell;
-mod domain;
+mod core;
 mod fft;
 mod mesh;
 
 pub use cell::*;
-pub use domain::*;
+pub use core::*;
 pub use fft::*;
 pub use mesh::*;

@@ -72,7 +72,7 @@ impl SolverOps for PolymerSolver {
     fn solve_concentration(&mut self, fields: &HashMap<usize, RField>, domain: &Domain) {
         // Update solver steps with current fields
         for solver in self.block_solvers.iter_mut() {
-            solver.update_step(&fields, &domain.ksq());
+            solver.update_step(fields, &domain.ksq());
         }
 
         // Propagate forward (initialize first solver w/ empty source)
