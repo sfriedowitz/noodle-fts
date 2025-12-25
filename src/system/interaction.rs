@@ -2,16 +2,14 @@ use std::collections::HashMap;
 
 use crate::fields::{FieldOps, RField};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Interaction {
     pairs: HashMap<(usize, usize), f64>,
 }
 
 impl Interaction {
     pub fn new() -> Self {
-        Self {
-            pairs: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn set_chi(&mut self, i: usize, j: usize, chi: f64) {
@@ -24,11 +22,11 @@ impl Interaction {
     pub fn energy(&self, concentrations: &HashMap<usize, RField>) -> f64 {
         let mut energy = 0.0;
         for ((i, j), chi_ij) in self.pairs.iter() {
-            if let Some(conc_i) = concentrations.get(i) {
-                if let Some(conc_j) = concentrations.get(j) {
-                    let prod = conc_i.fold_with(conc_j, 0.0, |acc, ci, cj| acc + 0.5 * chi_ij * ci * cj);
-                    energy += prod / conc_i.len() as f64
-                }
+            if let Some(conc_i) = concentrations.get(i)
+                && let Some(conc_j) = concentrations.get(j)
+            {
+                let prod = conc_i.fold_with(conc_j, 0.0, |acc, ci, cj| acc + 0.5 * chi_ij * ci * cj);
+                energy += prod / conc_i.len() as f64
             }
         }
         energy
@@ -37,10 +35,10 @@ impl Interaction {
     pub fn energy_bulk(&self, concentrations: &HashMap<usize, f64>) -> f64 {
         let mut energy = 0.0;
         for ((i, j), chi_ij) in self.pairs.iter() {
-            if let Some(conc_i) = concentrations.get(i) {
-                if let Some(conc_j) = concentrations.get(j) {
-                    energy += 0.5 * chi_ij * conc_i * conc_j;
-                }
+            if let Some(conc_i) = concentrations.get(i)
+                && let Some(conc_j) = concentrations.get(j)
+            {
+                energy += 0.5 * chi_ij * conc_i * conc_j;
             }
         }
         energy
@@ -52,10 +50,10 @@ impl Interaction {
         fields: &mut HashMap<usize, RField>,
     ) {
         for ((i, j), chi_ij) in self.pairs.iter() {
-            if let Some(omega_i) = fields.get_mut(i) {
-                if let Some(conc_j) = concentrations.get(j) {
-                    omega_i.zip_mut_with(&conc_j, |wi, cj| *wi += chi_ij * cj);
-                }
+            if let Some(omega_i) = fields.get_mut(i)
+                && let Some(conc_j) = concentrations.get(j)
+            {
+                omega_i.zip_mut_with(conc_j, |wi, cj| *wi += chi_ij * cj);
             }
         }
     }

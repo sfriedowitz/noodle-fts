@@ -6,28 +6,19 @@ on:
   pull_request:
 
 jobs:
-  clippy:
-    name: Lints / Clippy
+  rust-lints:
+    name: Lints / Rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
+      - run: cargo fmt --check
       - run: cargo clippy --all-features -- -D warnings
 
-  rustfmt:
-    name: Lints / Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --check
-
-  ruff:
-    name: Lints / Ruff
+  python-lints:
+    name: Lints / Python
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +50,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
       - run: pip install uv
-      - run: uv pip install maturin pytest
-      - run: maturin develop
+      - run: uv sync
+      - run: uv run maturin develop
       - run: uv run pytest

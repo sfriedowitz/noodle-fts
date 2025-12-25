@@ -65,9 +65,9 @@ impl FFT {
         // Transform the real -> complex dimension first
         let r2c_axis = self.ndim() - 1;
         if self.parallel {
-            ndfft_r2c_par(input, output, &mut self.r2c_handler, r2c_axis);
+            ndfft_r2c_par(input, output, &self.r2c_handler, r2c_axis);
         } else {
-            ndfft_r2c(input, output, &mut self.r2c_handler, r2c_axis);
+            ndfft_r2c(input, output, &self.r2c_handler, r2c_axis);
         }
 
         // Transform the remaining complex -> complex axes
@@ -98,9 +98,9 @@ impl FFT {
         // Transform the accumulated work into the output array
         let r2c_axis = self.ndim() - 1;
         if self.parallel {
-            ndifft_r2c_par(&self.work2, output, &mut self.r2c_handler, r2c_axis);
+            ndifft_r2c_par(&self.work2, output, &self.r2c_handler, r2c_axis);
         } else {
-            ndifft_r2c(&self.work2, output, &mut self.r2c_handler, r2c_axis);
+            ndifft_r2c(&self.work2, output, &self.r2c_handler, r2c_axis);
         }
     }
 }
