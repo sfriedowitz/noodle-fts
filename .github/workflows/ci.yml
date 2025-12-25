@@ -7,7 +7,7 @@ on:
 
 jobs:
   clippy:
-    name: Lints / clippy
+    name: Lints / Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
       - run: cargo clippy --all-features -- -D warnings
 
   rustfmt:
-    name: Lints / rustfmt
+    name: Lints / Rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
       - run: cargo fmt --check
 
   ruff:
-    name: Lints / ruff
+    name: Lints / Ruff
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
