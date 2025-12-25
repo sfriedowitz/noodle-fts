@@ -5,13 +5,21 @@ from pynoodle import (
     Block,
     CubicCell,
     Hexagonal2DCell,
+    Hexagonal3DCell,
     LamellarCell,
     Mesh,
+    MonoclinicCell,
     Monomer,
+    ObliqueCell,
+    OrthorhombicCell,
     Point,
     Polymer,
+    RectangularCell,
+    RhombohedralCell,
     SquareCell,
     System,
+    TetragonalCell,
+    TriclinicCell,
 )
 
 
@@ -87,15 +95,65 @@ class TestUnitCell:
         assert cell.volume > 0
         assert len(cell.parameters) == 1
 
+    def test_rectangular_cell(self) -> None:
+        cell = RectangularCell(a=4.0, b=3.0)
+        assert cell.ndim == 2
+        assert cell.volume == pytest.approx(12.0)
+        assert len(cell.parameters) == 2
+        assert cell.parameters[0] == 4.0
+        assert cell.parameters[1] == 3.0
+
     def test_hexagonal2d_cell(self) -> None:
         cell = Hexagonal2DCell(a=4.0)
         assert cell.ndim == 2
         assert cell.volume > 0
 
+    def test_oblique_cell(self) -> None:
+        cell = ObliqueCell(a=4.0, b=3.0, gamma=np.pi / 3)
+        assert cell.ndim == 2
+        assert cell.volume > 0
+        assert len(cell.parameters) == 3
+
     def test_cubic_cell(self) -> None:
         cell = CubicCell(a=4.0)
         assert cell.ndim == 3
         assert cell.volume == pytest.approx(4.0**3)
+
+    def test_tetragonal_cell(self) -> None:
+        cell = TetragonalCell(a=4.0, c=5.0)
+        assert cell.ndim == 3
+        assert cell.volume == pytest.approx(4.0 * 4.0 * 5.0)
+        assert len(cell.parameters) == 2
+
+    def test_orthorhombic_cell(self) -> None:
+        cell = OrthorhombicCell(a=4.0, b=3.0, c=5.0)
+        assert cell.ndim == 3
+        assert cell.volume == pytest.approx(60.0)
+        assert len(cell.parameters) == 3
+
+    def test_rhombohedral_cell(self) -> None:
+        cell = RhombohedralCell(a=4.0, alpha=np.pi / 2)
+        assert cell.ndim == 3
+        assert cell.volume == pytest.approx(4.0**3)
+        assert len(cell.parameters) == 2
+
+    def test_hexagonal3d_cell(self) -> None:
+        cell = Hexagonal3DCell(a=4.0, c=5.0)
+        assert cell.ndim == 3
+        assert cell.volume > 0
+        assert len(cell.parameters) == 2
+
+    def test_monoclinic_cell(self) -> None:
+        cell = MonoclinicCell(a=4.0, b=3.0, c=5.0, beta=np.pi / 2)
+        assert cell.ndim == 3
+        assert cell.volume == pytest.approx(60.0)
+        assert len(cell.parameters) == 4
+
+    def test_triclinic_cell(self) -> None:
+        cell = TriclinicCell(a=4.0, b=3.0, c=5.0, alpha=np.pi / 2, beta=np.pi / 2, gamma=np.pi / 3)
+        assert cell.ndim == 3
+        assert cell.volume > 0
+        assert len(cell.parameters) == 6
 
 
 class TestSystem:

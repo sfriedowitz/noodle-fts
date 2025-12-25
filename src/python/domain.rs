@@ -67,9 +67,16 @@ impl PyUnitCell {
         match lattice {
             CellLattice::Lamellar => Self::add_subclass(py, base, PyLamellarCell {}),
             CellLattice::Square => Self::add_subclass(py, base, PySquareCell {}),
+            CellLattice::Rectangular => Self::add_subclass(py, base, PyRectangularCell {}),
             CellLattice::Hexagonal2D => Self::add_subclass(py, base, PyHexagonal2DCell {}),
+            CellLattice::Oblique => Self::add_subclass(py, base, PyObliqueCell {}),
             CellLattice::Cubic => Self::add_subclass(py, base, PyCubicCell {}),
-            _ => todo!(),
+            CellLattice::Tetragonal => Self::add_subclass(py, base, PyTetragonalCell {}),
+            CellLattice::Orthorhombic => Self::add_subclass(py, base, PyOrthorhombicCell {}),
+            CellLattice::Rhombohedral => Self::add_subclass(py, base, PyRhombohedralCell {}),
+            CellLattice::Hexagonal3D => Self::add_subclass(py, base, PyHexagonal3DCell {}),
+            CellLattice::Monoclinic => Self::add_subclass(py, base, PyMonoclinicCell {}),
+            CellLattice::Triclinic => Self::add_subclass(py, base, PyTriclinicCell {}),
         }
     }
 
@@ -164,6 +171,110 @@ impl PyCubicCell {
     #[new]
     fn __new__(a: f64) -> PyResult<(Self, PyUnitCell)> {
         let cell = ToPyResult(UnitCell::cubic(a)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "RectangularCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyRectangularCell {}
+
+#[pymethods]
+impl PyRectangularCell {
+    #[new]
+    fn __new__(a: f64, b: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::rectangular(a, b)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "ObliqueCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyObliqueCell {}
+
+#[pymethods]
+impl PyObliqueCell {
+    #[new]
+    fn __new__(a: f64, b: f64, gamma: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::oblique(a, b, gamma)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "TetragonalCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyTetragonalCell {}
+
+#[pymethods]
+impl PyTetragonalCell {
+    #[new]
+    fn __new__(a: f64, c: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::tetragonal(a, c)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "OrthorhombicCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyOrthorhombicCell {}
+
+#[pymethods]
+impl PyOrthorhombicCell {
+    #[new]
+    fn __new__(a: f64, b: f64, c: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::orthorhombic(a, b, c)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "RhombohedralCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyRhombohedralCell {}
+
+#[pymethods]
+impl PyRhombohedralCell {
+    #[new]
+    fn __new__(a: f64, alpha: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::rhombohedral(a, alpha)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "Hexagonal3DCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyHexagonal3DCell {}
+
+#[pymethods]
+impl PyHexagonal3DCell {
+    #[new]
+    fn __new__(a: f64, c: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::hexagonal_3d(a, c)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "MonoclinicCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyMonoclinicCell {}
+
+#[pymethods]
+impl PyMonoclinicCell {
+    #[new]
+    fn __new__(a: f64, b: f64, c: f64, beta: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::monoclinic(a, b, c, beta)).into_py()?;
+        let base: PyUnitCell = cell.into();
+        Ok((Self {}, base))
+    }
+}
+
+#[pyclass(name = "TriclinicCell", module = "pynoodle._core", extends=PyUnitCell)]
+pub struct PyTriclinicCell {}
+
+#[pymethods]
+impl PyTriclinicCell {
+    #[new]
+    fn __new__(a: f64, b: f64, c: f64, alpha: f64, beta: f64, gamma: f64) -> PyResult<(Self, PyUnitCell)> {
+        let cell = ToPyResult(UnitCell::triclinic(a, b, c, alpha, beta, gamma)).into_py()?;
         let base: PyUnitCell = cell.into();
         Ok((Self {}, base))
     }

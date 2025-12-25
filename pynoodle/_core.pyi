@@ -115,15 +115,63 @@ class SquareCell(UnitCell):
 
     def __init__(self, a: float) -> None: ...
 
+class RectangularCell(UnitCell):
+    """2D rectangular unit cell."""
+
+    def __init__(self, a: float, b: float) -> None: ...
+
 class Hexagonal2DCell(UnitCell):
     """2D hexagonal unit cell."""
 
     def __init__(self, a: float) -> None: ...
 
+class ObliqueCell(UnitCell):
+    """2D oblique unit cell."""
+
+    def __init__(self, a: float, b: float, gamma: float) -> None: ...
+
 class CubicCell(UnitCell):
     """3D cubic unit cell."""
 
     def __init__(self, a: float) -> None: ...
+
+class TetragonalCell(UnitCell):
+    """3D tetragonal unit cell."""
+
+    def __init__(self, a: float, c: float) -> None: ...
+
+class OrthorhombicCell(UnitCell):
+    """3D orthorhombic unit cell."""
+
+    def __init__(self, a: float, b: float, c: float) -> None: ...
+
+class RhombohedralCell(UnitCell):
+    """3D rhombohedral unit cell."""
+
+    def __init__(self, a: float, alpha: float) -> None: ...
+
+class Hexagonal3DCell(UnitCell):
+    """3D hexagonal unit cell."""
+
+    def __init__(self, a: float, c: float) -> None: ...
+
+class MonoclinicCell(UnitCell):
+    """3D monoclinic unit cell."""
+
+    def __init__(self, a: float, b: float, c: float, beta: float) -> None: ...
+
+class TriclinicCell(UnitCell):
+    """3D triclinic unit cell."""
+
+    def __init__(
+        self,
+        a: float,
+        b: float,
+        c: float,
+        alpha: float,
+        beta: float,
+        gamma: float,
+    ) -> None: ...
 
 class System:
     """Polymer field-theoretic system."""
