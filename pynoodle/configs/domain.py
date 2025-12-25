@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field, PositiveInt
+from pydantic import Field, PositiveFloat, PositiveInt
 
 from pynoodle.configs.base import BaseNoodleModel
 
@@ -15,28 +15,28 @@ class LamellarCellConfig(BaseNoodleModel):
     """Configuration for 1D lamellar unit cell."""
 
     type: Literal["lamellar"] = "lamellar"
-    a: float = Field(gt=0.0)
+    a: PositiveFloat
 
 
 class SquareCellConfig(BaseNoodleModel):
     """Configuration for 2D square unit cell."""
 
     type: Literal["square"] = "square"
-    a: float = Field(gt=0.0)
+    a: PositiveFloat
 
 
 class Hexagonal2DCellConfig(BaseNoodleModel):
     """Configuration for 2D hexagonal unit cell."""
 
     type: Literal["hexagonal2d"] = "hexagonal2d"
-    a: float = Field(gt=0.0)
+    a: PositiveFloat
 
 
 class CubicCellConfig(BaseNoodleModel):
     """Configuration for 3D cubic unit cell."""
 
     type: Literal["cubic"] = "cubic"
-    a: float = Field(gt=0.0)
+    a: PositiveFloat
 
 
 # Union type for unit cell configurations

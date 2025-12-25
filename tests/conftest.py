@@ -7,25 +7,25 @@ from pynoodle.configs import MonomerConfig
 @pytest.fixture
 def monomer_a():
     """Create a test monomer A."""
-    return Monomer(id=0, size=1.0)
+    return Monomer(id=0, volume=1.0)
 
 
 @pytest.fixture
 def monomer_b():
     """Create a test monomer B."""
-    return Monomer(id=1, size=1.0)
+    return Monomer(id=1, volume=1.0)
 
 
 @pytest.fixture
 def monomer_a_config():
     """Create a test monomer A configuration."""
-    return MonomerConfig(id=0, size=1.0)
+    return MonomerConfig(id=0, volume=1.0)
 
 
 @pytest.fixture
 def monomer_b_config():
     """Create a test monomer B configuration."""
-    return MonomerConfig(id=1, size=1.0)
+    return MonomerConfig(id=1, volume=1.0)
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-from pydantic import Field, model_validator
+from pydantic import Field, NonNegativeInt, model_validator
 
 from pynoodle.configs.base import BaseNoodleModel
 from pynoodle.configs.chem import MonomerConfig, PointConfig, PolymerConfig, SpeciesConfig
@@ -8,8 +8,8 @@ from pynoodle.configs.domain import MeshConfig, UnitCellConfig
 class InteractionConfig(BaseNoodleModel):
     """Configuration for Flory-Huggins interaction parameters."""
 
-    i: int = Field(ge=0)
-    j: int = Field(ge=0)
+    i: NonNegativeInt
+    j: NonNegativeInt
     chi: float
 
 

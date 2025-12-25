@@ -101,7 +101,7 @@ impl BlockSolver {
             field,
             ksq,
             self.block.segment_length,
-            self.block.monomer.size,
+            self.block.monomer.volume,
             self.ds,
         );
     }
@@ -143,7 +143,7 @@ impl BlockSolver {
 
         // Prefactor: -(b²V_monomer φ) / (6V Q)
         let b_sq = self.block.segment_length * self.block.segment_length;
-        let prefactor = -(phi * b_sq * self.block.monomer.size) / (6.0 * volume * partition);
+        let prefactor = -(phi * b_sq * self.block.monomer.volume) / (6.0 * volume * partition);
 
         // Reuse FFT for transforming propagators
         let kmesh = self.mesh.kmesh();

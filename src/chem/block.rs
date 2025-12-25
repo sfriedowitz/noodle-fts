@@ -16,7 +16,7 @@ impl Block {
         }
     }
 
-    pub fn size(&self) -> f64 {
-        self.monomer.size * (self.repeat_units as f64)
+    pub fn volume(&self) -> f64 {
+        self.monomer.volume * (self.repeat_units as f64)
     }
 }

@@ -56,7 +56,7 @@ impl SolverOps for PointSolver {
         // Compute concentration field and partition function from omega field
         let mut partition_sum = 0.0;
         concentration.zip_mut_with(field, |c, w| {
-            *c = (-monomer.size * w).exp();
+            *c = (-monomer.volume * w).exp();
             partition_sum += *c;
         });
 

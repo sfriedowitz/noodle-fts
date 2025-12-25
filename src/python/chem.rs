@@ -14,14 +14,14 @@ impl_py_conversions!(Monomer, PyMonomer);
 #[pymethods]
 impl PyMonomer {
     #[new]
-    fn __new__(id: usize, size: f64) -> Self {
-        Monomer::new(id, size).into()
+    fn __new__(id: usize, volume: f64) -> Self {
+        Monomer::new(id, volume).into()
     }
 
     fn __repr__(&self) -> String {
         let id = self.0.id;
-        let size = self.0.size;
-        format!("Monomer(id={id}, size={size:.2})")
+        let volume = self.0.volume;
+        format!("Monomer(id={id}, volume={volume:.2})")
     }
 
     #[getter]
@@ -30,8 +30,8 @@ impl PyMonomer {
     }
 
     #[getter]
-    fn size(&self) -> f64 {
-        self.0.size
+    fn volume(&self) -> f64 {
+        self.0.volume
     }
 }
 
@@ -81,7 +81,7 @@ impl_py_conversions!(Species, PySpecies);
 impl PySpecies {
     fn __repr__(&self) -> String {
         let phi = self.0.phi();
-        let size = self.0.size();
+        let volume = self.0.volume();
         match &self.0 {
             Species::Point(point) => {
                 let monomer_id = point.monomer.id;
@@ -89,7 +89,7 @@ impl PySpecies {
             }
             Species::Polymer(polymer) => {
                 let nblocks = polymer.blocks.len();
-                format!("Polymer(blocks={nblocks}, phi={phi:.2}, size={size:.2})")
+                format!("Polymer(blocks={nblocks}, phi={phi:.2}, volume={volume:.2})")
             }
         }
     }
@@ -100,8 +100,8 @@ impl PySpecies {
     }
 
     #[getter]
-    fn size(&self) -> f64 {
-        self.0.size()
+    fn volume(&self) -> f64 {
+        self.0.volume()
     }
 
     #[getter]

@@ -296,7 +296,7 @@ impl System {
             .map(|solver| {
                 let species = solver.species();
                 let mu = (species.phi() / solver.partition()).ln();
-                (species.phi() / species.size()) * (mu - 1.0)
+                (species.phi() / species.volume()) * (mu - 1.0)
             })
             .sum();
 
@@ -323,7 +323,7 @@ impl System {
             .map(|solver| {
                 let species = solver.species();
                 let mu = species.phi().ln();
-                (species.phi() / species.size()) * (mu - 1.0)
+                (species.phi() / species.volume()) * (mu - 1.0)
             })
             .sum();
 

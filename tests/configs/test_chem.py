@@ -6,19 +6,19 @@ from pynoodle.configs import BlockConfig, MonomerConfig, PointConfig, PolymerCon
 
 class TestMonomerConfig:
     def test_valid_config(self):
-        config = MonomerConfig(id=0, size=1.0)
+        config = MonomerConfig(id=0, volume=1.0)
         assert config.id == 0
-        assert config.size == 1.0
+        assert config.volume == 1.0
 
     def test_invalid_id(self):
         with pytest.raises(ValidationError):
-            MonomerConfig(id=-1, size=1.0)
+            MonomerConfig(id=-1, volume=1.0)
 
-    def test_invalid_size(self):
+    def test_invalid_volume(self):
         with pytest.raises(ValidationError):
-            MonomerConfig(id=0, size=0.0)
+            MonomerConfig(id=0, volume=0.0)
         with pytest.raises(ValidationError):
-            MonomerConfig(id=0, size=-1.0)
+            MonomerConfig(id=0, volume=-1.0)
 
 
 class TestBlockConfig:

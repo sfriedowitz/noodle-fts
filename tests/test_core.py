@@ -17,9 +17,9 @@ from pynoodle import (
 
 class TestMonomer:
     def test_creation(self) -> None:
-        m = Monomer(id=0, size=1.0)
+        m = Monomer(id=0, volume=1.0)
         assert m.id == 0
-        assert m.size == 1.0
+        assert m.volume == 1.0
 
     def test_repr(self, monomer_a: Monomer) -> None:
         assert "Monomer" in repr(monomer_a)
@@ -38,7 +38,7 @@ class TestPoint:
     def test_creation(self, monomer_a: Monomer) -> None:
         p = Point(monomer=monomer_a, phi=1.0)
         assert p.phi == 1.0
-        assert p.size == monomer_a.size
+        assert p.volume == monomer_a.volume
         assert len(p.monomers) == 1
         assert p.monomer_fraction(0) == 1.0
 

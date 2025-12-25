@@ -37,7 +37,7 @@ class SystemBuilder:
         Returns:
             Monomer instance
         """
-        return Monomer(id=config.id, size=config.size)
+        return Monomer(id=config.id, volume=config.volume)
 
     @staticmethod
     def build_block(config: BlockConfig, monomers: dict[int, Monomer]) -> Block:

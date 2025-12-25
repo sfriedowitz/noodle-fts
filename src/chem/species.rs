@@ -7,7 +7,7 @@ use super::{block::Block, monomer::Monomer};
 pub trait SpeciesDescription {
     fn phi(&self) -> f64;
 
-    fn size(&self) -> f64;
+    fn volume(&self) -> f64;
 
     fn monomers(&self) -> Vec<Monomer>;
 
@@ -42,8 +42,8 @@ impl SpeciesDescription for Point {
         self.phi
     }
 
-    fn size(&self) -> f64 {
-        self.monomer.size
+    fn volume(&self) -> f64 {
+        self.monomer.volume
     }
 
     fn monomers(&self) -> Vec<Monomer> {
@@ -81,10 +81,10 @@ impl SpeciesDescription for Polymer {
         self.phi
     }
 
-    fn size(&self) -> f64 {
+    fn volume(&self) -> f64 {
         self.blocks
             .iter()
-            .map(|b| b.monomer.size * (b.repeat_units as f64))
+            .map(|b| b.monomer.volume * (b.repeat_units as f64))
             .sum()
     }
 
@@ -119,7 +119,7 @@ mod tests {
         assert!(species.monomer_fraction(monomer.id) == 1.0);
         assert!(species.monomer_fraction(1) == 0.0);
 
-        assert!(species.size() == monomer.size);
+        assert!(species.volume() == monomer.volume);
     }
 
     #[test]
@@ -135,6 +135,6 @@ mod tests {
         assert!(species.monomer_fraction(monomer_a.id) == 0.5);
         assert!(species.monomer_fraction(monomer_b.id) == 0.5);
 
-        assert!(species.size() == 200.0);
+        assert!(species.volume() == 200.0);
     }
 }

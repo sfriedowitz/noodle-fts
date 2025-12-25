@@ -28,8 +28,8 @@ class TestInteractionConfig:
 class TestSystemConfig:
     @pytest.fixture
     def diblock_config(self):
-        monomer_a = MonomerConfig(id=0, size=1.0)
-        monomer_b = MonomerConfig(id=1, size=1.0)
+        monomer_a = MonomerConfig(id=0, volume=1.0)
+        monomer_b = MonomerConfig(id=1, volume=1.0)
         block_a = BlockConfig(monomer_id=0, repeat_units=10, segment_length=0.1)
         block_b = BlockConfig(monomer_id=1, repeat_units=10, segment_length=0.1)
 
@@ -46,7 +46,7 @@ class TestSystemConfig:
         assert len(diblock_config.interactions) == 1
 
     def test_invalid_volume_fractions(self):
-        monomer_a = MonomerConfig(id=0, size=1.0)
+        monomer_a = MonomerConfig(id=0, volume=1.0)
         block_a = BlockConfig(monomer_id=0, repeat_units=10, segment_length=0.1)
 
         with pytest.raises(ValidationError, match="volume fractions"):
@@ -84,8 +84,8 @@ class TestSystemConfig:
         assert config_from_file.cell.a == 4.0
 
     def test_multiple_species(self):
-        monomer_a = MonomerConfig(id=0, size=1.0)
-        monomer_b = MonomerConfig(id=1, size=1.0)
+        monomer_a = MonomerConfig(id=0, volume=1.0)
+        monomer_b = MonomerConfig(id=1, volume=1.0)
         block_a = BlockConfig(monomer_id=0, repeat_units=10, segment_length=0.1)
         block_b = BlockConfig(monomer_id=1, repeat_units=10, segment_length=0.1)
 

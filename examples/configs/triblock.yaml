@@ -7,9 +7,9 @@ cell:
 
 monomers:
   - id: 0
-    size: 1.0
+    volume: 1.0
   - id: 1
-    size: 1.0
+    volume: 1.0
 
 species:
   - type: polymer

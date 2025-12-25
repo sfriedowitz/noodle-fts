@@ -35,7 +35,7 @@ impl PolymerSolver {
     }
 
     fn build_block_solvers(mesh: Mesh, species: &Polymer) -> Vec<BlockSolver> {
-        let target_ds = species.size() / species.contour_steps as f64;
+        let target_ds = species.volume() / species.contour_steps as f64;
         species
             .blocks
             .iter()
@@ -43,9 +43,9 @@ impl PolymerSolver {
             .map(|b| {
                 // ns is guaranteed to be at least 3 for each block,
                 // which results in an even number of contour steps per block
-                let ns = (b.size() / (2.0 * target_ds) + 0.5).floor() as usize;
+                let ns = (b.volume() / (2.0 * target_ds) + 0.5).floor() as usize;
                 let ns = 2 * ns.max(1) + 1;
-                let ds = b.size() / ((ns - 1) as f64);
+                let ds = b.volume() / ((ns - 1) as f64);
                 BlockSolver::new(b, mesh, ns, ds)
             })
             .collect()
@@ -93,7 +93,7 @@ impl SolverOps for PolymerSolver {
         self.partition = self.block_solvers[0].compute_partition(0);
 
         // Update solver concentration
-        let prefactor = self.species.phi() / self.species.size() / self.partition;
+        let prefactor = self.species.phi() / self.species.volume() / self.partition;
         for solver in self.block_solvers.iter_mut() {
             solver.update_concentration(prefactor);
         }
