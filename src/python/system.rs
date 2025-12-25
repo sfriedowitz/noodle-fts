@@ -31,6 +31,12 @@ impl PySystem {
         Ok(Self(system))
     }
 
+    fn __repr__(&self) -> String {
+        let nmonomer = self.0.nmonomer();
+        let nspecies = self.0.nspecies();
+        format!("System(monomers={nmonomer}, species={nspecies})")
+    }
+
     #[getter]
     fn nmonomer(&self) -> usize {
         self.0.nmonomer()
@@ -52,19 +58,19 @@ impl PySystem {
         py_cell.into_subclass(py)
     }
 
-    fn free_energy(&self) -> f64 {
+    fn get_free_energy(&self) -> f64 {
         self.0.free_energy()
     }
 
-    fn free_energy_bulk(&self) -> f64 {
+    fn get_free_energy_bulk(&self) -> f64 {
         self.0.free_energy_bulk()
     }
 
-    fn field_error(&self) -> f64 {
+    fn get_field_error(&self) -> f64 {
         self.0.field_error()
     }
 
-    fn stress_error(&self) -> f64 {
+    fn get_stress_error(&self) -> f64 {
         self.0.stress_error()
     }
 
@@ -72,7 +78,7 @@ impl PySystem {
         self.0.interaction_mut().set_chi(i, j, chi)
     }
 
-    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    fn get_fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (id, field) in self.0.fields().iter() {
             dict.set_item(id, field.to_pyarray(py))?;
@@ -80,7 +86,7 @@ impl PySystem {
         Ok(dict)
     }
 
-    fn concentrations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    fn get_concentrations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (id, conc) in self.0.concentrations().iter() {
             dict.set_item(id, conc.to_pyarray(py))?;
@@ -88,7 +94,7 @@ impl PySystem {
         Ok(dict)
     }
 
-    fn stress<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
+    fn get_stress<'py>(&self, py: Python<'py>) -> Bound<'py, numpy::PyArray2<f64>> {
         self.0.stress().to_pyarray(py)
     }
 
@@ -129,6 +135,11 @@ impl PyFieldUpdater {
         Self(updater)
     }
 
+    fn __repr__(&self) -> String {
+        let step_size = self.0.step_size();
+        format!("FieldUpdater(step_size={step_size:.3})")
+    }
+
     #[getter]
     fn step_size(&self) -> f64 {
         self.0.step_size()
@@ -151,6 +162,11 @@ impl PyCellUpdater {
     fn __new__(step_size: f64) -> Self {
         let updater = CellUpdater::new(step_size);
         Self(updater)
+    }
+
+    fn __repr__(&self) -> String {
+        let step_size = self.0.step_size();
+        format!("CellUpdater(step_size={step_size:.3})")
     }
 
     #[getter]

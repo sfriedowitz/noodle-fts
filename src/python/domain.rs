@@ -39,17 +39,17 @@ impl PyMesh {
     }
 
     #[getter]
-    fn get_ndim(&self) -> usize {
+    fn ndim(&self) -> usize {
         self.0.ndim()
     }
 
     #[getter]
-    fn get_size(&self) -> usize {
+    fn size(&self) -> usize {
         self.0.size()
     }
 
     #[getter]
-    fn get_dimensions(&self) -> Vec<usize> {
+    fn dimensions(&self) -> Vec<usize> {
         self.0.dimensions()
     }
 }
@@ -92,27 +92,27 @@ impl PyUnitCell {
     }
 
     #[getter]
-    fn get_ndim(&self) -> usize {
+    fn ndim(&self) -> usize {
         self.0.ndim()
     }
 
     #[getter]
-    fn get_volume(&self) -> f64 {
+    fn volume(&self) -> f64 {
         self.0.volume()
     }
 
     #[getter]
-    fn get_parameters<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+    fn parameters<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.0.parameters().to_pyarray(py)
     }
 
     #[getter]
-    fn get_shape<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+    fn shape<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         self.0.shape().to_pyarray(py)
     }
 
     #[getter]
-    fn get_metric<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+    fn metric<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         self.0.metric().to_pyarray(py)
     }
 }

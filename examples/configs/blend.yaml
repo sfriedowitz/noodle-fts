@@ -1,0 +1,50 @@
+mesh:
+  dimensions: [24, 24, 24] # 3D mesh
+
+cell:
+  type: cubic
+  a: 8.0 # Cubic lattice constant
+
+monomers:
+  - id: 0
+    size: 1.0
+  - id: 1
+    size: 1.0
+  - id: 2
+    size: 1.0
+
+species:
+  # First polymer species (AB diblock)
+  - type: polymer
+    phi: 0.6
+    contour_steps: 150
+    blocks:
+      - monomer_id: 0
+        repeat_units: 30
+        segment_length: 0.02
+      - monomer_id: 1
+        repeat_units: 30
+        segment_length: 0.02
+
+  # Second polymer species (BC diblock)
+  - type: polymer
+    phi: 0.4
+    contour_steps: 150
+    blocks:
+      - monomer_id: 1
+        repeat_units: 20
+        segment_length: 0.02
+      - monomer_id: 2
+        repeat_units: 40
+        segment_length: 0.02
+
+interactions:
+  - i: 0
+    j: 1
+    chi: 0.3
+  - i: 0
+    j: 2
+    chi: 0.5
+  - i: 1
+    j: 2
+    chi: 0.4
