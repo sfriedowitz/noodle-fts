@@ -1,5 +1,7 @@
 # Noodle FTS
 
+[![CI](https://github.com/sfriedowitz/noodle-fts/actions/workflows/ci.yml/badge.svg)](https://github.com/sfriedowitz/noodle-fts/actions/workflows/ci.yml)
+
 Polymer field-theoretic simulations in Rust and Python.
 
 The repository consists of two main components:
